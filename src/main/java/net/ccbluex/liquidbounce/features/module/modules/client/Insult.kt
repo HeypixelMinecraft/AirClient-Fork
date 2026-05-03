@@ -104,7 +104,7 @@ object Insult : Module("Insult", Category.CLIENT, spacedName = "LLL kid") {
     private fun sendInsultWords(msg: String, name: String) {
         var message = msg.replace("%name%", name)
         if (waterMark) {
-            message = "D1ckB0unce > $message"
+            message = "AirC1ient > $message"
         }
 
         mc.thePlayer?.sendChatMessage(message)

@@ -5,7 +5,7 @@ import net.ccbluex.liquidbounce.config.choices
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
 import net.ccbluex.liquidbounce.file.FileManager
-import net.ccbluex.liquidbounce.utils.kotlin.RandomUtils.randomNumber
+import net.ccbluex.liquidbounce.utils.client.ClientUtils
 import net.minecraft.client.renderer.texture.DynamicTexture
 import net.minecraft.util.ResourceLocation
 import java.io.File
@@ -17,18 +17,48 @@ import javax.imageio.ImageIO
 
 object Cape : Module("Cape", Category.RENDER) {
 
-    private val capeFolder = File(FileManager.dir, "capes")
-    private val capeMap = mutableMapOf<String, ResourceLocation>()
+    private val capeFolder: File by lazy {
+        val folder = File(FileManager.dir, "capes")
+        if (!folder.exists()) {
+            folder.mkdirs()
+        }
+        folder
+    }
 
-    private val capeModeValue: ListValue
+    private val capeMap = mutableMapOf<String, ResourceLocation>()
+    private val capeFiles = mutableListOf<File>()
+    private var initialized = false
+
+    private var capeModeValue: ListValue? = null
 
     val capeMode: String
-        get() = capeModeValue.get()
+        get() = capeModeValue?.get() ?: "None"
 
     init {
-        extractCapesFromJar()
-        val capeNames = scanAndLoadCapes()
-        capeModeValue = choices("Cape", capeNames.toTypedArray(), capeNames.first())
+        initializeCapes()
+    }
+
+    private fun initializeCapes() {
+        if (initialized) return
+        
+        try {
+            ClientUtils.LOGGER.info("[Cape] Starting initialization...")
+            
+            extractCapesFromJar()
+            scanCapes()
+            
+            val capeNames = mutableListOf("None")
+            capeNames.addAll(capeFiles.map { it.nameWithoutExtension })
+            
+            capeModeValue = choices("Cape", capeNames.toTypedArray(), capeNames.first())
+            
+            ClientUtils.LOGGER.info("[Cape] Initialization complete. Found ${capeFiles.size} capes")
+            initialized = true
+        } catch (e: Exception) {
+            ClientUtils.LOGGER.error("[Cape] Initialization failed: ${e.message}")
+            e.printStackTrace()
+            capeModeValue = choices("Cape", arrayOf("None"), "None")
+        }
     }
 
     private fun extractCapesFromJar() {
@@ -36,13 +66,17 @@ object Cape : Module("Cape", Category.RENDER) {
             capeFolder.mkdirs()
             
             val jarPath = javaClass.protectionDomain.codeSource.location.path
+            ClientUtils.LOGGER.info("[Cape] Jar path: $jarPath")
+            
             if (!jarPath.endsWith(".jar")) {
+                ClientUtils.LOGGER.info("[Cape] Not running from jar, copying from resources...")
                 copyCapesFromResources()
                 return
             }
 
             val zipFile = ZipFile(jarPath)
             val entries = zipFile.entries()
+            var extractedCount = 0
 
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
@@ -52,16 +86,25 @@ object Cape : Module("Cape", Category.RENDER) {
                     val targetFile = File(capeFolder, fileName)
                     
                     if (!targetFile.exists()) {
-                        zipFile.getInputStream(entry).use { input ->
-                            FileOutputStream(targetFile).use { output ->
-                                input.copyTo(output)
+                        try {
+                            zipFile.getInputStream(entry).use { input ->
+                                FileOutputStream(targetFile).use { output ->
+                                    input.copyTo(output)
+                                }
                             }
+                            extractedCount++
+                            ClientUtils.LOGGER.info("[Cape] Extracted: $fileName")
+                        } catch (e: Exception) {
+                            ClientUtils.LOGGER.error("[Cape] Failed to extract $fileName: ${e.message}")
                         }
                     }
                 }
             }
             zipFile.close()
+            ClientUtils.LOGGER.info("[Cape] Extracted $extractedCount capes from jar")
         } catch (e: Exception) {
+            ClientUtils.LOGGER.error("[Cape] Failed to extract capes from jar: ${e.message}")
+            e.printStackTrace()
             copyCapesFromResources()
         }
     }
@@ -70,103 +113,159 @@ object Cape : Module("Cape", Category.RENDER) {
         try {
             capeFolder.mkdirs()
             
-            val capeDir = File(javaClass.classLoader.getResource("assets/minecraft/airclient/cape")?.file ?: return)
-            if (capeDir.exists() && capeDir.isDirectory) {
-                capeDir.listFiles { file -> file.extension.equals("png", ignoreCase = true) }?.forEach { file ->
-                    val targetFile = File(capeFolder, file.name)
-                    if (!targetFile.exists()) {
-                        try {
-                            file.copyTo(targetFile, overwrite = false)
-                        } catch (e: Exception) {
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            try {
-                val knownCapes = listOf(
-                    "cape1.png", "cape2.png", "cape3.png", "cape4.png",
-                    "astolfo.png", "ravenanime.png", "ravenxd.png",
-                    "Augustus.png", "Astolfotrap.png",
-                    "rainbow.png",
-                    "gradient_blue.png", "gradient_purple.png", "gradient_pink.png",
-                    "gradient_green.png", "gradient_orange.png", "gradient_red.png",
-                    "gradient_cyan.png", "gradient_yellow.png",
-                    "gradient_horizontal_blue.png", "gradient_horizontal_purple.png", "gradient_horizontal_pink.png",
-                    "solid_black.png", "solid_white.png", "solid_red.png", "solid_blue.png",
-                    "solid_green.png", "solid_purple.png", "solid_pink.png", "solid_orange.png",
-                    "solid_cyan.png", "solid_yellow.png", "solid_darkblue.png", "solid_darkgreen.png", "solid_darkred.png",
-                    "striped_red_blue.png", "striped_black_white.png", "striped_purple_yellow.png",
-                    "striped_green_white.png", "striped_orange_black.png", "striped_pink_cyan.png",
-                    "checker_black_white.png", "checker_red_black.png", "checker_blue_white.png",
-                    "checker_purple_pink.png", "checker_green_black.png",
-                    "diagonal_blue_red.png", "diagonal_green_black.png", "diagonal_purple_cyan.png", "diagonal_orange_pink.png",
-                    "fade_black.png", "fade_red.png", "fade_blue.png", "fade_green.png", "fade_purple.png", "fade_orange.png",
-                    "neon_blue.png", "neon_pink.png", "neon_green.png", "neon_orange.png", "neon_cyan.png", "neon_yellow.png",
-                    "tricolor_flag.png", "tricolor_germany.png", "tricolor_italy.png", "tricolor_rainbow.png", "tricolor_ocean.png",
-                    "half_black_white.png", "half_red_blue.png", "half_green_purple.png", "half_orange_pink.png", "half_cyan_yellow.png"
-                )
+            val knownCapes = listOf(
+                "cape1.png", "cape2.png", "cape3.png", "cape4.png",
+                "astolfo.png", "ravenanime.png", "ravenxd.png",
+                "Augustus.png", "Astolfotrap.png",
+                "rainbow.png",
+                "gradient_blue.png", "gradient_purple.png", "gradient_pink.png",
+                "gradient_green.png", "gradient_orange.png", "gradient_red.png",
+                "gradient_cyan.png", "gradient_yellow.png",
+                "gradient_horizontal_blue.png", "gradient_horizontal_purple.png", "gradient_horizontal_pink.png",
+                "striped_red_blue.png", "striped_black_white.png", "striped_purple_yellow.png",
+                "striped_green_white.png", "striped_orange_black.png", "striped_pink_cyan.png",
+                "checker_black_white.png", "checker_red_black.png", "checker_blue_white.png",
+                "checker_purple_pink.png", "checker_green_black.png",
+                "diagonal_blue_red.png", "diagonal_green_black.png", "diagonal_purple_cyan.png", "diagonal_orange_pink.png",
+                "fade_black.png", "fade_red.png", "fade_blue.png", "fade_green.png", "fade_purple.png", "fade_orange.png",
+                "neon_blue.png", "neon_pink.png", "neon_green.png", "neon_orange.png", "neon_cyan.png", "neon_yellow.png",
+                "tricolor_flag.png", "tricolor_germany.png", "tricolor_italy.png", "tricolor_rainbow.png", "tricolor_ocean.png",
+                "half_black_white.png", "half_red_blue.png", "half_green_purple.png", "half_orange_pink.png", "half_cyan_yellow.png"
+            )
 
-                for (capeName in knownCapes) {
-                    val targetFile = File(capeFolder, capeName)
-                    if (!targetFile.exists()) {
-                        try {
-                            val resource = javaClass.classLoader.getResourceAsStream("assets/minecraft/airclient/cape/$capeName")
-                            if (resource != null) {
-                                FileOutputStream(targetFile).use { output ->
-                                    resource.copyTo(output)
-                                }
-                                resource.close()
+            var copiedCount = 0
+            for (capeName in knownCapes) {
+                val targetFile = File(capeFolder, capeName)
+                if (!targetFile.exists()) {
+                    try {
+                        val resource = javaClass.classLoader.getResourceAsStream("assets/minecraft/airclient/cape/$capeName")
+                        if (resource != null) {
+                            FileOutputStream(targetFile).use { output ->
+                                resource.copyTo(output)
                             }
-                        } catch (e: Exception) {
+                            resource.close()
+                            copiedCount++
+                            ClientUtils.LOGGER.info("[Cape] Copied from resources: $capeName")
                         }
+                    } catch (e: Exception) {
+                        ClientUtils.LOGGER.error("[Cape] Failed to copy $capeName: ${e.message}")
                     }
                 }
-            } catch (e: Exception) {
             }
+            ClientUtils.LOGGER.info("[Cape] Copied $copiedCount capes from resources")
+        } catch (e: Exception) {
+            ClientUtils.LOGGER.error("[Cape] Failed to copy capes from resources: ${e.message}")
+            e.printStackTrace()
         }
     }
 
-    private fun scanAndLoadCapes(): MutableList<String> {
-        val capeNames = mutableListOf("None")
+    private fun scanCapes() {
+        capeFiles.clear()
         capeMap.clear()
 
-        if (capeFolder.exists() && capeFolder.isDirectory) {
-            val files = capeFolder.listFiles { file -> file.extension.equals("png", ignoreCase = true) }
-            files?.sortedBy { it.nameWithoutExtension }?.forEach { file ->
-                try {
-                    val name = file.nameWithoutExtension
-                    val bufferedImage = ImageIO.read(FileInputStream(file))
-                    if (bufferedImage != null) {
-                        val resourceLocation = ResourceLocation("airclient/capes/${randomNumber(16)}")
-                        mc.textureManager.loadTexture(resourceLocation, DynamicTexture(bufferedImage))
-                        capeNames.add(name)
-                        capeMap[name] = resourceLocation
-                    }
-                } catch (e: Exception) {
-                }
-            }
+        if (!capeFolder.exists() || !capeFolder.isDirectory) {
+            ClientUtils.LOGGER.warn("[Cape] Cape folder does not exist: ${capeFolder.absolutePath}")
+            return
         }
 
-        return capeNames
+        ClientUtils.LOGGER.info("[Cape] Scanning folder: ${capeFolder.absolutePath}")
+
+        capeFolder.walk()
+            .filter { file ->
+                file.isFile && file.extension.equals("png", ignoreCase = true)
+            }
+            .sortedBy { it.nameWithoutExtension.lowercase() }
+            .forEach { file ->
+                capeFiles.add(file)
+                ClientUtils.LOGGER.info("[Cape] Found cape file: ${file.name}")
+            }
+
+        ClientUtils.LOGGER.info("[Cape] Total capes found: ${capeFiles.size}")
+    }
+
+    private fun loadCapeTexture(file: File): ResourceLocation? {
+        return try {
+            ClientUtils.LOGGER.info("[Cape] Loading texture for: ${file.name}")
+            
+            val bufferedImage = ImageIO.read(FileInputStream(file))
+            if (bufferedImage != null) {
+                val resourceLocation = ResourceLocation("airclient_capes_${file.nameWithoutExtension.lowercase()}")
+                mc.textureManager.loadTexture(resourceLocation, DynamicTexture(bufferedImage))
+                ClientUtils.LOGGER.info("[Cape] Successfully loaded texture: ${file.name} -> $resourceLocation")
+                resourceLocation
+            } else {
+                ClientUtils.LOGGER.error("[Cape] Failed to read image: ${file.name}")
+                null
+            }
+        } catch (e: Exception) {
+            ClientUtils.LOGGER.error("[Cape] Failed to load cape texture ${file.name}: ${e.message}")
+            e.printStackTrace()
+            null
+        }
     }
 
     fun getCapeForPlayer(uuid: UUID): ResourceLocation? {
-        if (!state) return null
+        if (!state) {
+            ClientUtils.LOGGER.debug("[Cape] Module not enabled")
+            return null
+        }
         
-        val currentPlayer = mc.thePlayer ?: return null
+        val currentPlayer = mc.thePlayer
+        if (currentPlayer == null) {
+            ClientUtils.LOGGER.debug("[Cape] No current player")
+            return null
+        }
         
-        if (uuid != currentPlayer.uniqueID) return null
+        if (uuid != currentPlayer.uniqueID) {
+            ClientUtils.LOGGER.debug("[Cape] UUID mismatch: $uuid != ${currentPlayer.uniqueID}")
+            return null
+        }
         
-        return capeMap[capeMode]
+        val selectedCape = capeMode
+        ClientUtils.LOGGER.debug("[Cape] Selected cape: $selectedCape")
+        
+        if (selectedCape == "None") {
+            ClientUtils.LOGGER.debug("[Cape] No cape selected")
+            return null
+        }
+        
+        if (capeMap.containsKey(selectedCape)) {
+            ClientUtils.LOGGER.debug("[Cape] Returning cached texture for: $selectedCape")
+            return capeMap[selectedCape]
+        }
+        
+        ClientUtils.LOGGER.info("[Cape] Loading texture for: $selectedCape")
+        val file = capeFiles.find { it.nameWithoutExtension == selectedCape }
+        if (file != null) {
+            val texture = loadCapeTexture(file)
+            if (texture != null) {
+                capeMap[selectedCape] = texture
+                ClientUtils.LOGGER.info("[Cape] Successfully loaded and cached texture for: $selectedCape")
+                return texture
+            } else {
+                ClientUtils.LOGGER.error("[Cape] Failed to load texture for: $selectedCape")
+            }
+        } else {
+            ClientUtils.LOGGER.error("[Cape] Cape file not found for: $selectedCape")
+        }
+        
+        return null
     }
 
     override val tag
         get() = capeMode
 
     fun refreshCapes() {
-        extractCapesFromJar()
-        val capeNames = scanAndLoadCapes()
-        capeModeValue.updateValues(capeNames.toTypedArray())
+        ClientUtils.LOGGER.info("[Cape] Refreshing capes...")
+        initialized = false
+        capeMap.clear()
+        initializeCapes()
+        
+        capeModeValue?.let { value ->
+            val capeNames = mutableListOf("None")
+            capeNames.addAll(capeFiles.map { it.nameWithoutExtension })
+            value.updateValues(capeNames.toTypedArray())
+            ClientUtils.LOGGER.info("[Cape] Refreshed cape list: ${capeFiles.size} capes")
+        }
     }
 }
