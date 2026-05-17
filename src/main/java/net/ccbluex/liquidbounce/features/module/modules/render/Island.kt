@@ -56,6 +56,7 @@ import java.awt.Color
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.ceil
 import kotlin.math.sqrt
 import kotlin.math.pow
@@ -85,8 +86,10 @@ object Island : Module("Island", Category.RENDER) {
     private val ButtonColor by color("Button-Color", Color(20, 150, 180, 255))
     private val ModuleNotify by boolean("Notification", true)
     private val isScaffold by boolean("Scaffold", true)
+    private val scaffoldStyle by choices("ScaffoldStyle", arrayOf("Classic", "Bar", "Minimal", "Compact", "Standard", "Circle", "Split", "Modern", "Outline"), "Classic") { isScaffold }
     private val ScaffoldTheme by color("ScaffoldTheme", Color(65, 130, 225))
     private val maxBlocks by int("maxBlocks", 576, 64..576)
+    private val standardShowBlockCount by boolean("StandardShowBlockCount", true) { isScaffold && scaffoldStyle == "Standard" }
 
     private val breakProgressCheck by boolean("BreakProgress", true)
     private val breakProgressTheme by color("BreakProgressTheme", Color(225, 150, 65))
@@ -463,8 +466,18 @@ object Island : Module("Island", Category.RENDER) {
 
         } else if (scaffoldModule?.state == true ||  scaffoldModule2?.state == true && isScaffold) {
             renderMode = "SCAFFOLD"
-            targetWidth = 190F
-            targetHeight = 58F
+            when (scaffoldStyle) {
+                "Classic" -> { targetWidth = 190F; targetHeight = 58F }
+                "Bar" -> { targetWidth = 280F; targetHeight = 28F }
+                "Minimal" -> { targetWidth = 120F; targetHeight = 24F }
+                "Compact" -> { targetWidth = 160F; targetHeight = 40F }
+                "Standard" -> { targetWidth = 280F; targetHeight = 28F }
+                "Circle" -> { targetWidth = 80F; targetHeight = 80F }
+                "Split" -> { targetWidth = 200F; targetHeight = 50F }
+                "Modern" -> { targetWidth = 220F; targetHeight = 65F }
+                "Outline" -> { targetWidth = 180F; targetHeight = 35F }
+                else -> { targetWidth = 190F; targetHeight = 58F }
+            }
             targetX = (width - targetWidth) / 2
         } else if (showGappleProgress && animatedGappleProgress > 0.01f && ModuleManager.getModule("Gapple")?.state == true) {
             renderMode = "GAPPLE_PROGRESS"
@@ -825,6 +838,21 @@ object Island : Module("Island", Category.RENDER) {
     }
 
     private fun renderScaffoldContent(x: Float, y: Float, w: Float, h: Float) {
+        when (scaffoldStyle) {
+            "Classic" -> renderScaffoldClassic(x, y, w, h)
+            "Bar" -> renderScaffoldBar(x, y, w, h)
+            "Minimal" -> renderScaffoldMinimal(x, y, w, h)
+            "Compact" -> renderScaffoldCompact(x, y, w, h)
+            "Standard" -> renderScaffoldStandard(x, y, w, h)
+            "Circle" -> renderScaffoldCircle(x, y, w, h)
+            "Split" -> renderScaffoldSplit(x, y, w, h)
+            "Modern" -> renderScaffoldModern(x, y, w, h)
+            "Outline" -> renderScaffoldOutline(x, y, w, h)
+            else -> renderScaffoldClassic(x, y, w, h)
+        }
+    }
+
+    private fun renderScaffoldClassic(x: Float, y: Float, w: Float, h: Float) {
         val hotbarBlockCount = (0..8).sumOf { slotIndex ->
             val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
             if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
@@ -859,6 +887,300 @@ object Island : Module("Island", Category.RENDER) {
         drawRoundedRect(x + padding, barY, x + padding + maxBarWidth, barY + barHeight, Color(60, 60, 70, 180).rgb, 3F)
         val lighter = Color((ScaffoldTheme.red + 50).coerceAtMost(255), (ScaffoldTheme.green + 50).coerceAtMost(255), (ScaffoldTheme.blue + 50).coerceAtMost(255), 255)
         drawRoundedRect(x + padding, barY, x + padding + ProgressBarAnimationWidth, barY + barHeight, lighter.rgb, 3F)
+    }
+
+    private fun renderScaffoldBar(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val targetBPS = displayedBPS
+        AnimatedBps += (targetBPS - AnimatedBps) * 0.15 * (Minecraft.getDebugFPS() / 20.0).coerceIn(0.1, 2.0)
+
+        val padding = 6F
+        val barHeight = h - padding * 2
+        val maxBarWidth = w - padding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+
+        drawRoundedRect(x + padding, y + padding, x + padding + maxBarWidth, y + padding + barHeight, Color(60, 60, 70, 180).rgb, barHeight / 2)
+        val lighter = Color((ScaffoldTheme.red + 50).coerceAtMost(255), (ScaffoldTheme.green + 50).coerceAtMost(255), (ScaffoldTheme.blue + 50).coerceAtMost(255), 255)
+        if (ProgressBarAnimationWidth > 1F) {
+            drawRoundedRect(x + padding, y + padding, x + padding + ProgressBarAnimationWidth, y + padding + barHeight, lighter.rgb, barHeight / 2)
+        }
+
+        val bpsText = String.format("%.1f", if(AnimatedBps < 0.01) 0.0 else AnimatedBps)
+        val blockText = "$hotbarBlockCount"
+        val bpsFullText = "$bpsText b/s"
+        val textWidth = Fonts.fontSemibold35.getStringWidth("$blockText  $bpsFullText")
+        val centerX = x + w / 2
+
+        if (ProgressBarAnimationWidth > textWidth + 10F) {
+            Fonts.fontSemibold35.drawString(blockText, centerX - textWidth / 2, y + (h - Fonts.fontSemibold35.FONT_HEIGHT) / 2, Color.WHITE.rgb)
+            Fonts.fontRegular30.drawString(bpsFullText, centerX - textWidth / 2 + Fonts.fontSemibold35.getStringWidth(blockText) + 6F, y + (h - Fonts.fontRegular30.FONT_HEIGHT) / 2 + 1F, Color(220, 220, 220, 200).rgb)
+        } else {
+            Fonts.fontSemibold35.drawCenteredString(blockText, centerX, y + (h - Fonts.fontSemibold35.FONT_HEIGHT) / 2, Color.WHITE.rgb)
+        }
+    }
+
+    private fun renderScaffoldMinimal(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+
+        val padding = 4F
+        val barHeight = h - padding * 2
+        val maxBarWidth = w - padding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+
+        drawRoundedRect(x + padding, y + padding, x + padding + maxBarWidth, y + padding + barHeight, Color(60, 60, 70, 180).rgb, barHeight / 2)
+        val lighter = Color((ScaffoldTheme.red + 50).coerceAtMost(255), (ScaffoldTheme.green + 50).coerceAtMost(255), (ScaffoldTheme.blue + 50).coerceAtMost(255), 255)
+        if (ProgressBarAnimationWidth > 1F) {
+            drawRoundedRect(x + padding, y + padding, x + padding + ProgressBarAnimationWidth, y + padding + barHeight, lighter.rgb, barHeight / 2)
+        }
+
+        val blockText = "$hotbarBlockCount"
+        val centerX = x + w / 2
+        Fonts.fontSemibold35.drawCenteredString(blockText, centerX, y + (h - Fonts.fontSemibold35.FONT_HEIGHT) / 2, Color.WHITE.rgb)
+    }
+
+    private fun renderScaffoldCompact(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val targetBPS = displayedBPS
+        AnimatedBps += (targetBPS - AnimatedBps) * 0.15 * (Minecraft.getDebugFPS() / 20.0).coerceIn(0.1, 2.0)
+
+        val padding = 6F
+        val iconSize = 20F
+        val iconBgX = x + padding
+        val iconBgY = y + 6F
+        val themeColor = Color(ScaffoldTheme.red, ScaffoldTheme.green, ScaffoldTheme.blue, 200)
+        drawRoundedRect(iconBgX, iconBgY, iconBgX + iconSize, iconBgY + iconSize, themeColor.rgb, 4F)
+        val blockImgSize = 14
+        drawImage(ResourceLocation("airclient/watermark_images/block.png"), (iconBgX + (iconSize - blockImgSize) / 2).toInt(), (iconBgY + (iconSize - blockImgSize) / 2 + 1).toInt(), blockImgSize, blockImgSize, Color.WHITE)
+
+        val textX = iconBgX + iconSize + 6F
+        val bpsText = String.format("%.1f", if(AnimatedBps < 0.01) 0.0 else AnimatedBps)
+        Fonts.fontSemibold35.drawString("$hotbarBlockCount blocks", textX, iconBgY + 2F, Color.WHITE.rgb)
+        Fonts.fontRegular30.drawString("$bpsText b/s", textX + Fonts.fontSemibold35.getStringWidth("$hotbarBlockCount blocks") + 8F, iconBgY + 3F, Color(200, 200, 200, 200).rgb)
+
+        val barHeight = 4F
+        val barY = y + h - barHeight - padding + 4F
+        val maxBarWidth = w - padding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+        drawRoundedRect(x + padding, barY, x + padding + maxBarWidth, barY + barHeight, Color(60, 60, 70, 180).rgb, 2F)
+        val lighter = Color((ScaffoldTheme.red + 50).coerceAtMost(255), (ScaffoldTheme.green + 50).coerceAtMost(255), (ScaffoldTheme.blue + 50).coerceAtMost(255), 255)
+        drawRoundedRect(x + padding, barY, x + padding + ProgressBarAnimationWidth, barY + barHeight, lighter.rgb, 2F)
+    }
+
+    private fun renderScaffoldStandard(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+
+        val padding = 6F
+        val barHeight = h - padding * 2
+        val maxBarWidth = w - padding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+
+        drawRoundedRect(x + padding, y + padding, x + padding + maxBarWidth, y + padding + barHeight, Color(60, 60, 70, 180).rgb, 0F)
+        val themeColor = Color(ScaffoldTheme.red, ScaffoldTheme.green, ScaffoldTheme.blue, 255)
+        if (ProgressBarAnimationWidth > 1F) {
+            drawRoundedRect(x + padding, y + padding, x + padding + ProgressBarAnimationWidth, y + padding + barHeight, themeColor.rgb, 0F)
+        }
+
+        if (standardShowBlockCount) {
+            val blockText = "$hotbarBlockCount blocks"
+            val blockWidth = Fonts.fontSemibold35.getStringWidth(blockText) + 12F
+            val textY = y + (h - Fonts.fontSemibold35.FONT_HEIGHT) / 2
+
+            if (ProgressBarAnimationWidth > blockWidth + 10F) {
+                Fonts.fontSemibold35.drawString(blockText, x + padding + 8F, textY, Color.WHITE.rgb)
+            } else {
+                Fonts.fontSemibold35.drawCenteredString(blockText, x + w / 2, textY, Color.WHITE.rgb)
+            }
+        }
+    }
+
+    private fun renderScaffoldCircle(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+
+        val centerX = x + w / 2
+        val centerY = y + h / 2
+        val radius = min(w, h) / 2 - 12F
+        val ringWidth = 5F
+
+        GlStateManager.pushMatrix()
+        GlStateManager.enableBlend()
+        GlStateManager.disableTexture2D()
+        GlStateManager.tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO)
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+
+        glColor4f(0.24f, 0.24f, 0.27f, 0.8f)
+        glLineWidth(ringWidth)
+        glBegin(GL_LINE_LOOP)
+        for (i in 0..360) {
+            val theta = i * Math.PI / 180
+            glVertex2d(centerX + radius * cos(theta), centerY + radius * sin(theta))
+        }
+        glEnd()
+
+        val themeColor = Color(ScaffoldTheme.red, ScaffoldTheme.green, ScaffoldTheme.blue, 255)
+        glColor4f(themeColor.red / 255f, themeColor.green / 255f, themeColor.blue / 255f, 1f)
+        glBegin(GL_LINE_STRIP)
+        val segments = 360
+        val drawSegments = (segments * percentage).toInt()
+        for (i in 0..drawSegments) {
+            val theta = (i - 90) * Math.PI / 180
+            glVertex2d(centerX + radius * cos(theta), centerY + radius * sin(theta))
+        }
+        glEnd()
+
+        glDisable(GL_LINE_SMOOTH)
+        GlStateManager.enableTexture2D()
+        GlStateManager.disableBlend()
+        GlStateManager.popMatrix()
+
+        val blockText = "$hotbarBlockCount"
+        Fonts.fontSemibold40.drawCenteredString(blockText, centerX, centerY - Fonts.fontSemibold40.FONT_HEIGHT / 2, Color.WHITE.rgb)
+    }
+
+    private fun renderScaffoldSplit(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val targetBPS = displayedBPS
+        AnimatedBps += (targetBPS - AnimatedBps) * 0.15 * (Minecraft.getDebugFPS() / 20.0).coerceIn(0.1, 2.0)
+
+        val padding = 6F
+        val barHeight = 4F
+        val barY = y + h - barHeight - padding
+        val contentHeight = barY - y - padding - 4F
+
+        val dividerX = x + w / 2
+        drawRoundedRect(dividerX - 1F, y + padding, dividerX + 1F, barY - 4F, Color(80, 80, 90, 150).rgb, 1F)
+
+        val leftCenterX = x + w / 4
+        val rightCenterX = x + w * 3 / 4
+
+        Fonts.fontSemibold40.drawCenteredString("$hotbarBlockCount", leftCenterX, y + contentHeight / 2 - 2F, Color.WHITE.rgb)
+        Fonts.fontRegular30.drawCenteredString("blocks", leftCenterX, y + contentHeight / 2 + Fonts.fontSemibold40.FONT_HEIGHT, Color(180, 180, 180).rgb)
+
+        val bpsText = String.format("%.1f", if(AnimatedBps < 0.01) 0.0 else AnimatedBps)
+        Fonts.fontSemibold40.drawCenteredString(bpsText, rightCenterX, y + contentHeight / 2 - 2F, Color.WHITE.rgb)
+        Fonts.fontRegular30.drawCenteredString("b/s", rightCenterX, y + contentHeight / 2 + Fonts.fontSemibold40.FONT_HEIGHT, Color(180, 180, 180).rgb)
+
+        val maxBarWidth = w - padding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+        drawRoundedRect(x + padding, barY, x + padding + maxBarWidth, barY + barHeight, Color(60, 60, 70, 180).rgb, 2F)
+        val lighter = Color((ScaffoldTheme.red + 50).coerceAtMost(255), (ScaffoldTheme.green + 50).coerceAtMost(255), (ScaffoldTheme.blue + 50).coerceAtMost(255), 255)
+        drawRoundedRect(x + padding, barY, x + padding + ProgressBarAnimationWidth, barY + barHeight, lighter.rgb, 2F)
+    }
+
+    private fun renderScaffoldModern(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val targetBPS = displayedBPS
+        AnimatedBps += (targetBPS - AnimatedBps) * 0.15 * (Minecraft.getDebugFPS() / 20.0).coerceIn(0.1, 2.0)
+
+        val padding = 10F
+        val themeColor = Color(ScaffoldTheme.red, ScaffoldTheme.green, ScaffoldTheme.blue, 40)
+        drawRoundedRect(x + padding, y + padding, x + w - padding, y + h - padding, themeColor.rgb, 8F)
+
+        val blockText = "$hotbarBlockCount"
+        val centerX = x + w / 2
+        val numberY = y + h / 2 - Fonts.font52.FONT_HEIGHT / 2 - 12F
+
+        Fonts.font52.drawCenteredString(blockText, centerX, numberY, Color.WHITE.rgb)
+
+        val labelY = numberY + Fonts.font52.FONT_HEIGHT + 2F
+        Fonts.fontSemibold35.drawCenteredString("BLOCKS", centerX, labelY, Color(180, 180, 180).rgb)
+
+        val bpsText = String.format("%.1f b/s", if(AnimatedBps < 0.01) 0.0 else AnimatedBps)
+        Fonts.fontRegular30.drawCenteredString(bpsText, centerX, labelY + Fonts.fontSemibold35.FONT_HEIGHT + 2F, Color(150, 150, 150).rgb)
+
+        val barHeight = 5F
+        val barY = y + h - barHeight - padding - 2F
+        val maxBarWidth = w - padding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+        drawRoundedRect(x + padding, barY, x + padding + maxBarWidth, barY + barHeight, Color(40, 40, 50, 200).rgb, 3F)
+        val lighter = Color(ScaffoldTheme.red, ScaffoldTheme.green, ScaffoldTheme.blue, 255)
+        drawRoundedRect(x + padding, barY, x + padding + ProgressBarAnimationWidth, barY + barHeight, lighter.rgb, 3F)
+    }
+
+    private fun renderScaffoldOutline(x: Float, y: Float, w: Float, h: Float) {
+        val hotbarBlockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (hotbarBlockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val targetBPS = displayedBPS
+        AnimatedBps += (targetBPS - AnimatedBps) * 0.15 * (Minecraft.getDebugFPS() / 20.0).coerceIn(0.1, 2.0)
+
+        val padding = 6F
+        val innerPadding = 4F
+        val themeColor = Color(ScaffoldTheme.red, ScaffoldTheme.green, ScaffoldTheme.blue, 255)
+
+        RenderUtils.drawRoundedBorderRect(x + padding, y + padding, x + w - padding, y + h - padding, 
+            2F, Color(0, 0, 0, 0).rgb, themeColor.rgb, 6F)
+
+        val centerX = x + w / 2
+        val textY = y + (h - Fonts.fontSemibold35.FONT_HEIGHT) / 2
+
+        val blockText = "$hotbarBlockCount blocks"
+        val bpsText = String.format("%.1f b/s", if(AnimatedBps < 0.01) 0.0 else AnimatedBps)
+        val separator = "  |  "
+        val fullText = "$blockText$separator$bpsText"
+
+        Fonts.fontSemibold35.drawCenteredString(fullText, centerX, textY, Color.WHITE.rgb)
+
+        val barHeight = 3F
+        val barY = y + h - barHeight - padding - innerPadding
+        val maxBarWidth = w - padding * 2 - innerPadding * 2
+        val targetBarWidth = maxBarWidth * percentage
+        val lerpSpeed = 0.15f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
+        ProgressBarAnimationWidth += (targetBarWidth - ProgressBarAnimationWidth) * lerpSpeed
+        ProgressBarAnimationWidth = ProgressBarAnimationWidth.coerceIn(0F, maxBarWidth)
+
+        drawRoundedRect(x + padding + innerPadding, barY, x + padding + innerPadding + maxBarWidth, barY + barHeight, Color(60, 60, 70, 150).rgb, 2F)
+        if (ProgressBarAnimationWidth > 1F) {
+            drawRoundedRect(x + padding + innerPadding, barY, x + padding + innerPadding + ProgressBarAnimationWidth, barY + barHeight, themeColor.rgb, 2F)
+        }
     }
 
     private fun renderNotificationStack(x: Float, y: Float, w: Float, h: Float) {
