@@ -105,6 +105,10 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val reduceFactor by float("Factor", 0.6f, 0.6f..1f) { mode == "IntaveReduce" }
     private val hurtTime by int("HurtTime", 9, 1..10) { mode == "IntaveReduce" }
 
+    // MatrixReduce
+    private val matrixReduceFactor by float("MatrixReduceFactor", 0.6f, 0.0f..1f) { mode == "MatrixReduce" }
+    private val matrixReduceDebug by boolean("MatrixReduceDebug", false) { mode == "MatrixReduce" }
+
     private val pauseOnExplosion by boolean("PauseOnExplosion", true)
     private val ticksToPause by int("TicksToPause", 20, 1..50) { pauseOnExplosion }
 
@@ -615,12 +619,17 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
                 "matrixreduce" -> {
                     if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
-                        packet.motionX = (packet.getMotionX() * 0.33).toInt()
-                        packet.motionZ = (packet.getMotionZ() * 0.33).toInt()
+                        val factor = matrixReduceFactor.toDouble()
+                        packet.motionX = (packet.getMotionX() * factor).toInt()
+                        packet.motionZ = (packet.getMotionZ() * factor).toInt()
 
                         if (thePlayer.onGround) {
                             packet.motionX = (packet.getMotionX() * 0.86).toInt()
                             packet.motionZ = (packet.getMotionZ() * 0.86).toInt()
+                        }
+
+                        if (matrixReduceDebug) {
+                            chat("§7[MatrixReduce] §fApplied factor: §a${(factor * 100).toInt()}%")
                         }
                     }
                 }
