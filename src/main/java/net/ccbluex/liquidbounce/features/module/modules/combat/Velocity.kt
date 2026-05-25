@@ -39,6 +39,7 @@ import kotlin.collections.component2
 import kotlin.collections.set
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.max
 import kotlin.math.sqrt
 
 object Velocity : Module("Velocity", Category.COMBAT) {
@@ -50,8 +51,9 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         "Mode", arrayOf(
             "Simple", "AAC", "AACPush", "AACZero", "AACv4",
             "Reverse", "SmoothReverse", "Jump", "Glitch", "Legit",
-            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce",
-            "IntaveReduce", "Delay", "GrimC03", "Hypixel", "HypixelAir",
+            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce", "MatrixReduce2", "MatrixReduce3",
+            "IntaveReduce", "Intave14", "Intave14.3.3", "IntaveStrong", "AttackReduce",
+            "Delay", "GrimC03", "Hypixel", "HypixelAir",
             "Click", "BlocksMC", "Polar", "Buffer", "Prediction"
         ), "Simple"
     )
@@ -108,6 +110,33 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     // MatrixReduce
     private val matrixReduceFactor by float("MatrixReduceFactor", 0.6f, 0.0f..1f) { mode == "MatrixReduce" }
     private val matrixReduceDebug by boolean("MatrixReduceDebug", false) { mode == "MatrixReduce" }
+
+    // MatrixReduce2
+    private val matrixReduce2MovingReduce by float("MatrixReduce2-MovingReduce", 0.0f, 0.0f..1.0f) { mode == "MatrixReduce2" }
+    private val matrixReduce2StaticReduce by float("MatrixReduce2-StaticReduce", 0.2f, 0.0f..1.0f) { mode == "MatrixReduce2" }
+
+    // MatrixReduce3
+    private val matrixReduce3Boost by boolean("MatrixReduce3-Boost", false) { mode == "MatrixReduce3" }
+    private val matrixReduce3BoostFactor by float("MatrixReduce3-BoostFactor", 0.33f, 0.0f..5.0f) { mode == "MatrixReduce3" && matrixReduce3Boost }
+    private val matrixReduce3BoostDelay by int("MatrixReduce3-BoostDelay", 0, 0..2000) { mode == "MatrixReduce3" && matrixReduce3Boost }
+
+    // Intave14
+    private val intave14TriggerTimes by int("Intave14-TriggerTimes", 2, 1..3) { mode == "Intave14" }
+    private val intave14FirstReduce by int("Intave14-FirstReduce", 9, 1..10) { mode == "Intave14" && intave14TriggerTimes >= 1 }
+    private val intave14SecondReduce by int("Intave14-SecondReduce", 8, 1..10) { mode == "Intave14" && intave14TriggerTimes >= 2 }
+    private val intave14ThirdReduce by int("Intave14-ThirdReduce", 6, 1..10) { mode == "Intave14" && intave14TriggerTimes >= 3 }
+    private val intave14OnlyWhenBackward by boolean("Intave14-OnlyWhenBackward", true) { mode == "Intave14" }
+    private val intave14FinalReverse by boolean("Intave14-FinalReverse", false) { mode == "Intave14" }
+    private val intave14FinalReverseFactor by float("Intave14-FinalReverseFactor", 1.0f, 0.0f..5.0f) { mode == "Intave14" && intave14FinalReverse }
+    private val intave14Debug by boolean("Intave14-Debug", false) { mode == "Intave14" }
+
+    // IntaveStrong
+    private val intaveStrongFactor by float("IntaveStrong-Factor", 0.6f, 0.0f..1.0f) { mode == "IntaveStrong" }
+
+    // AttackReduce
+    private val attackReduceFactor by float("AttackReduce-Factor", 0.6f, -1.0f..1.0f) { mode == "AttackReduce" }
+    private val attackReduceSprintFactor by float("AttackReduce-SprintFactor", 0.6f, -1.0f..1.0f) { mode == "AttackReduce" }
+    private val attackReduceHurtTime by intRange("AttackReduce-HurtTime", 9..9, 1..10) { mode == "AttackReduce" }
 
     private val pauseOnExplosion by boolean("PauseOnExplosion", true)
     private val ticksToPause by int("TicksToPause", 20, 1..50) { pauseOnExplosion }
@@ -184,6 +213,18 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
     // Polar
     private var polarHurtTime = kotlin.random.Random.nextInt(8, 10)
+
+    // Intave14
+    private var intave14OnGround = false
+    private var intave14NotTriggered1 = true
+    private var intave14NotTriggered2 = true
+    private var intave14NotTriggered3 = true
+    private var intave14NotTriggeredA = true
+    private var intave14FinalReverseCondition = 0
+    private var intave14FinalReverseTriggered = false
+
+    // MatrixReduce3
+    private val matrixReduce3BoostTimer = MSTimer()
 
     // Buffer Mode
     private val bufferedPackets = mutableListOf<BufferedPacket>()
@@ -377,6 +418,28 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     polarHurtTime = kotlin.random.Random.nextInt(8, 10)
                 }
             }
+
+            "intave14" -> {
+                if (mc.thePlayer.hurtTime >= 9 && hasReceivedVelocity) {
+                    intave14OnGround = mc.thePlayer.onGround
+                }
+                if (mc.thePlayer.hurtTime == 0 && hasReceivedVelocity) {
+                    hasReceivedVelocity = false
+                }
+            }
+
+            "matrixreduce2" -> {
+                if (hasReceivedVelocity && mc.thePlayer.hurtTime >= 9) {
+                    if (mc.thePlayer.isMoving && !(mc.thePlayer.isBlocking || mc.thePlayer.isSneaking || !mc.thePlayer.onGround)) {
+                        mc.thePlayer.motionX *= matrixReduce2MovingReduce
+                        mc.thePlayer.motionZ *= matrixReduce2MovingReduce
+                    } else if (!mc.thePlayer.isMoving || (mc.thePlayer.isBlocking || mc.thePlayer.isSneaking || !mc.thePlayer.onGround)) {
+                        mc.thePlayer.motionX *= matrixReduce2StaticReduce
+                        mc.thePlayer.motionZ *= matrixReduce2StaticReduce
+                    }
+                    hasReceivedVelocity = false
+                }
+            }
         }
     }
 
@@ -504,7 +567,98 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                 }
                 lastAttackTime = System.currentTimeMillis()
             }
+
+            "attackreduce" -> {
+                if (mc.thePlayer.hurtTime in attackReduceHurtTime) {
+                    if (mc.thePlayer.isSprinting) {
+                        mc.thePlayer.motionX *= attackReduceSprintFactor
+                        mc.thePlayer.motionZ *= attackReduceSprintFactor
+                    } else {
+                        mc.thePlayer.motionX *= attackReduceFactor
+                        mc.thePlayer.motionZ *= attackReduceFactor
+                    }
+                }
+            }
+
+            "intavestrong" -> {
+                if (mc.thePlayer.hurtTime > 0) {
+                    mc.thePlayer.motionX *= intaveStrongFactor
+                    mc.thePlayer.motionZ *= intaveStrongFactor
+                }
+            }
+
+            "intave14" -> {
+                if (intave14OnlyWhenBackward && !isMovingBackwards()) return@handler
+                if (!hasReceivedVelocity) return@handler
+                when (mc.thePlayer.hurtTime) {
+                    intave14FirstReduce -> if (intave14NotTriggered1 && intave14TriggerTimes >= 1) {
+                        mc.thePlayer.motionX *= 0.6
+                        mc.thePlayer.motionZ *= 0.6
+                        intave14FinalReverseCondition++
+                        intave14NotTriggered1 = false
+                        intave14NotTriggeredA = false
+                        if (intave14Debug) chat("Intave14 Reduce Phase1")
+                    }
+
+                    intave14SecondReduce -> if (intave14NotTriggered2 && intave14TriggerTimes >= 2) {
+                        if (intave14NotTriggeredA) {
+                            mc.thePlayer.motionX *= 0.6
+                            mc.thePlayer.motionZ *= 0.6
+                            intave14NotTriggeredA = false
+                        } else {
+                            mc.thePlayer.motionX *= 0.35
+                            mc.thePlayer.motionZ *= 0.35
+                        }
+                        intave14FinalReverseCondition++
+                        intave14NotTriggered2 = false
+                        if (intave14Debug) chat("Intave14 Reduce Phase2")
+                    }
+
+                    intave14ThirdReduce -> if (intave14NotTriggered3 && intave14TriggerTimes >= 3) {
+                        if (intave14NotTriggeredA) {
+                            mc.thePlayer.motionX *= 0.6
+                            mc.thePlayer.motionZ *= 0.6
+                            intave14NotTriggeredA = false
+                        } else {
+                            mc.thePlayer.motionX *= 0.35
+                            mc.thePlayer.motionZ *= 0.35
+                        }
+                        intave14FinalReverseCondition++
+                        intave14NotTriggered3 = false
+                        if (intave14Debug) chat("Intave14 Reduce Phase3")
+                    }
+                }
+
+                if (intave14FinalReverse && mc.thePlayer.hurtTime == 1 && !intave14FinalReverseTriggered) {
+                    if (intave14FinalReverseCondition >= intave14TriggerTimes) {
+                        mc.thePlayer.motionX *= -intave14FinalReverseFactor
+                        mc.thePlayer.motionZ *= -intave14FinalReverseFactor
+                        intave14FinalReverseTriggered = true
+                        if (intave14Debug) chat("Intave14 FinalReverse")
+                    }
+                }
+            }
         }
+    }
+
+    private fun isMovingBackwards(): Boolean {
+        val player = mc.thePlayer ?: return false
+        val motionX = player.motionX
+        val motionZ = player.motionZ
+
+        if (sqrt(motionX * motionX + motionZ * motionZ) < 0.1) return true
+
+        val moveAngle = Math.toDegrees(atan2(motionX, motionZ)).toFloat().normalizeAngle()
+        val lookAngle = player.rotationYaw.normalizeAngle()
+        val angleDiff = minOf(
+            abs(moveAngle - lookAngle),
+            360 - abs(moveAngle - lookAngle)
+        )
+        return angleDiff >= 60
+    }
+
+    private fun Float.normalizeAngle(): Float {
+        return ((this % 360) + 360) % 360
     }
 
     private fun checkAir(blockPos: BlockPos): Boolean {
@@ -691,6 +845,50 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     hasReceivedVelocity = true
                 }
 
+                "intave14" -> {
+                    intave14FinalReverseTriggered = false
+                    hasReceivedVelocity = true
+                    intave14NotTriggered1 = true
+                    intave14NotTriggered2 = true
+                    intave14NotTriggered3 = true
+                    intave14NotTriggeredA = true
+                    intave14FinalReverseCondition = 0
+                }
+
+                "intave14.3.3" -> {
+                    hasReceivedVelocity = true
+                }
+
+                "matrixreduce2" -> {
+                    hasReceivedVelocity = true
+                }
+
+                "matrixreduce3" -> {
+                    if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
+                        event.cancelEvent()
+                        if (abs(packet.realMotionY) >= 0.1f) {
+                            mc.thePlayer.motionY = (packet.motionY / 8000f).toDouble()
+
+                            val currentSpeed = sqrt(mc.thePlayer.motionX * mc.thePlayer.motionX + mc.thePlayer.motionZ * mc.thePlayer.motionZ)
+
+                            val knockbackX = packet.getMotionX() / 8000f
+                            val knockbackZ = packet.getMotionZ() / 8000f
+                            val knockbackSpeed = sqrt(knockbackX * knockbackX + knockbackZ * knockbackZ)
+                            if (!mc.thePlayer.isMoving) {
+                                val reducedSpeed = max(knockbackSpeed * 0.1, currentSpeed)
+                                if (knockbackSpeed > 0) {
+                                    mc.thePlayer.motionX = knockbackX / knockbackSpeed * reducedSpeed
+                                    mc.thePlayer.motionZ = knockbackZ / knockbackSpeed * reducedSpeed
+                                }
+                            } else if (matrixReduce3Boost && matrixReduce3BoostTimer.hasTimePassed(matrixReduce3BoostDelay.toLong())) {
+                                mc.thePlayer.motionX *= (matrixReduce3BoostFactor.toDouble() + 1)
+                                mc.thePlayer.motionZ *= (matrixReduce3BoostFactor.toDouble() + 1)
+                                matrixReduce3BoostTimer.reset()
+                            }
+                        }
+                    }
+                }
+
                 "buffer" -> {
                     event.cancelEvent()
                     bufferedPackets.add(BufferedPacket(packet, bufferDelay))
@@ -833,6 +1031,18 @@ object Velocity : Module("Velocity", Category.COMBAT) {
             "aaczero" ->
                 if (thePlayer.hurtTime > 0)
                     event.cancelEvent()
+        }
+    }
+
+    val onMotion = handler<MotionEvent> {
+        if (mode == "Intave14.3.3") {
+            if (mc.thePlayer.hurtTime == 10) {
+                mc.thePlayer.motionX *= -1.0
+                mc.thePlayer.motionZ *= -1.0
+            } else if (mc.thePlayer.hurtTime == 9 && mc.thePlayer.onGround) {
+                mc.thePlayer.motionX *= 0.9
+                mc.thePlayer.motionZ *= 0.9
+            }
         }
     }
 

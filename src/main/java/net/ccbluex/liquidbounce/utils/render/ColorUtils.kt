@@ -200,6 +200,10 @@ object ColorUtils {
         return Color(color.red, color.green, color.blue, alpha)
     }
 
+    fun reAlpha(color: Color, alpha: Float): Color {
+        return Color(color.red, color.green, color.blue, (alpha * 255).toInt().coerceIn(0, 255))
+    }
+
     fun colorCode(code: String, alpha: Int = 255): Color {
         val colorIndex = when (code.lowercase()) {
             "0" -> 0
@@ -371,5 +375,17 @@ object ColorUtils {
 
     fun interpolate(oldValue: Double, newValue: Double, interpolationValue: Double): Double {
         return (oldValue + (newValue - oldValue) * interpolationValue)
+    }
+
+    @JvmStatic
+    fun LiquidSlowly(time: Long, count: Int, saturation: Float, brightness: Float): Color {
+        val color = Color(Color.HSBtoRGB((time.toFloat() + count * 3000000f) / 2 / 1.0E9f, saturation, brightness))
+        return Color(color.red / 255.0f, color.green / 255.0f, color.blue / 255.0f, color.alpha / 255.0f)
+    }
+
+    @JvmStatic
+    fun getRainbowOpaque(seconds: Int, saturation: Float, brightness: Float, index: Int): Int {
+        val hue = ((System.currentTimeMillis() + index) % (seconds * 1000)) / (seconds * 1000).toFloat()
+        return Color.HSBtoRGB(hue, saturation, brightness)
     }
 }

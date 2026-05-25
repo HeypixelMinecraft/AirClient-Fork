@@ -151,6 +151,12 @@
         "module.atAllProvider.description": "当你在消息中使用'@a'时，自动提及服务器上的所有人。",
 
         "module.attackEffects.description": "自定义攻击时显示的效果。",
+        "module.attackEffect.description": "攻击时显示粒子特效",
+        "module.attackEffect2.description": "自定义攻击时显示的效果。",
+        "module.hitBubbles.description": "攻击时显示特效",
+        "module.fireFlies.description": "萤火虫粒子效果",
+        "module.motionBlur.description": "动态模糊。",
+        "module.targetStrafe.description": "启用killaura时环绕目标移动。",
 
         "module.autoAccount.description": "功能丰富的自动注册/登录和帐号管理器。",
 
@@ -428,6 +434,9 @@
         "module.hUDEdit.description": "打开HUD编辑器",
 
         "module.musicPlayer.description": "音乐播放器",
+        "module.colorMixer.description": "自定义一个可用在其他元素的混合颜色",
+        "module.nextTrack.description": "切换到下一首音乐。",
+        "module.previousTrack.description": "切换到上一首音乐。",
 
         "module.rawInput.description": "鼠标修复",
 
@@ -461,11 +470,7 @@
 
         "module.snakeGame.description": "在游戏中玩贪吃蛇",
 
-        "module.grimArmorBreak.description": "Grim破甲",
-
         "module.grimAntiLagBack.description": "适用于Grim的反回弹",
-
-        "module.chestPreview.description": "开启箱子时预览物品",
 
         "module.blockNotify.description": "格挡成功提示",
 
@@ -519,7 +524,9 @@
 
         "module.fireballTrajectory.description":"预测烈焰弹的爆炸范围",
 
-        "module.drugHallucination.description":"爸爸，这玩意带劲。"
+        "module.drugHallucination.description":"爸爸，这玩意带劲。",
+
+        "module.mVPDisplay.description":"显示MVP信息"
 
     }
 }

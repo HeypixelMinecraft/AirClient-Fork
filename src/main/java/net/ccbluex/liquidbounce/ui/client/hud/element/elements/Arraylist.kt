@@ -21,9 +21,12 @@ import net.ccbluex.liquidbounce.utils.extensions.safeDiv
 import net.ccbluex.liquidbounce.utils.GlowUtils
 import net.ccbluex.liquidbounce.utils.render.*
 import net.ccbluex.liquidbounce.utils.render.BlurUtils
+import net.ccbluex.liquidbounce.utils.render.EmbeddedStencil
+import net.ccbluex.liquidbounce.utils.render.InternalBlurShader
 import net.ccbluex.liquidbounce.utils.render.ColorUtils.fade
 import net.ccbluex.liquidbounce.utils.render.ColorUtils.withAlpha
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.deltaTime
+import net.ccbluex.liquidbounce.features.module.modules.render.getMixedColor
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawImage
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRect
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
@@ -48,7 +51,7 @@ class Arraylist(
 ) : Element("Arraylist", x, y, scale, side) {
 
     private val textColorMode by choices(
-        "Text-Mode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme"), "Theme"
+        "Text-Mode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Theme"
     )
     private val textColors = ColorSettingsInteger(this, "TextColor") { textColorMode == "Custom" }.with(blueRibbon)
     private val textFadeColors = ColorSettingsInteger(this, "Text-Fade") { textColorMode == "Fade" }.with(0, 111, 255)
@@ -66,7 +69,7 @@ class Arraylist(
     private val rectMode by choices("Rect-Mode", arrayOf("None", "Left", "Right", "Outline"), "Right")
     private val roundedRectRadius by float("RoundedRect-Radius", 0F, 0F..2F) { rectMode !in setOf("None", "Outline") }
     private val rectColorMode by choices(
-        "Rect-ColorMode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme"), "Theme"
+        "Rect-ColorMode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Theme"
     ) { rectMode != "None" }
     private val rectColors =
         ColorSettingsInteger(this, "RectColor", applyMax = true) { isCustomRectSupported }.with(blueRibbon)
@@ -86,7 +89,7 @@ class Arraylist(
     private val roundedBackgroundRadius by float("RoundedBackGround-Radius", 1F, 0F..5F) { bgColors.color().alpha > 0 }
 
     private val backgroundMode by choices(
-        "Background-Mode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme"), "Custom"
+        "Background-Mode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Custom"
     )
     private val bgColors =
         ColorSettingsInteger(this, "BackgroundColor") { backgroundMode == "Custom" }.with(Color.BLACK.withAlpha(150))
@@ -133,7 +136,7 @@ class Arraylist(
     private val iconFadeColor by color("IconFadeColor", Color.WHITE) { iconColorMode == "Fade" && displayIcons }
     private val iconFadeDistance by int("IconFadeDistance", 50, 0..100) { iconColorMode == "Fade" && displayIcons }
 
-    private fun isColorModeUsed(value: String) = value in listOf(textColorMode, rectMode, backgroundMode, iconColorMode, glowColorMode)
+    private fun isColorModeUsed(value: String) = value in listOf(textColorMode, rectColorMode, backgroundMode, iconColorMode, glowColorMode, tagsColorMode)
 
     private val saturation by float("Random-Saturation", 0.9f, 0f..1f) { isColorModeUsed("Random") }
     private val brightness by float("Random-Brightness", 1f, 0f..1f) { isColorModeUsed("Random") }
@@ -141,6 +144,11 @@ class Arraylist(
     private val rainbowY by float("Rainbow-Y", -1000F, -2000F..2000F) { isColorModeUsed("Rainbow") }
     private val gradientX by float("Gradient-X", -1000F, -2000F..2000F) { isColorModeUsed("Gradient") }
     private val gradientY by float("Gradient-Y", -1000F, -2000F..2000F) { isColorModeUsed("Gradient") }
+    
+    private val skySaturation by float("Sky-Saturation", 0.9f, 0f..1f) { isColorModeUsed("Sky") }
+    private val skyBrightness by float("Sky-Brightness", 1f, 0f..1f) { isColorModeUsed("Sky") }
+    private val skySpeed by float("Sky-Speed", 1f, 0.1f..5f) { isColorModeUsed("Sky") }
+    private val mixerSeconds by int("Mixer-Seconds", 2, 1..10) { isColorModeUsed("Mixer") }
 
     private val tags by boolean("Tags", true)
     private val tagsStyle by choices("TagsStyle", arrayOf("[]", "()", "<>", "-", "|", "Space"), "Space") {
@@ -152,7 +160,7 @@ class Arraylist(
     }.onChanged { updateTagDetails() }
 
     private val tagsColorMode by choices(
-        "Tags-ColorMode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme"), "Custom"
+        "Tags-ColorMode", arrayOf("Custom", "Fade", "Random", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Custom"
     ) { tags }
     private val tagsColors = ColorSettingsInteger(this, "TagsColor") { tagsColorMode == "Custom" }.with(Color.GRAY)
     private val tagsFadeColors = ColorSettingsInteger(this, "Tags-Fade") { tagsColorMode == "Fade" }.with(Color.LIGHT_GRAY)
@@ -365,10 +373,23 @@ class Arraylist(
                             GL11.glTranslated(-renderX, -renderY, 0.0)
                             GL11.glScalef(1F / scale, 1F / scale, 1F)
 
-                            BlurUtils.blurArea(
-                                blurX, blurY, blurX + blurWidth, blurY + blurHeight,
-                                blurStrength
-                            )
+                            try {
+                                EmbeddedStencil.checkSetupFBO(mc.framebuffer)
+                                EmbeddedStencil.write(false)
+                                drawRoundedRect(
+                                    blurX, blurY, blurX + blurWidth, blurY + blurHeight,
+                                    Color.WHITE.rgb, roundedBackgroundRadius,
+                                    if (rectMode == "Left") {
+                                        RenderUtils.RoundedCorners.NONE
+                                    } else {
+                                        RenderUtils.RoundedCorners.LEFT_ONLY
+                                    }
+                                )
+                                EmbeddedStencil.erase(true)
+                                val scaledBlurRadius = blurStrength * (bgColors.color().alpha / 255f)
+                                InternalBlurShader.blurArea(blurX, blurY, blurWidth, blurHeight, scaledBlurRadius)
+                                EmbeddedStencil.dispose()
+                            } catch (_: Exception) {}
 
                             GL11.glScalef(scale, scale, scale)
                             GL11.glTranslated(renderX, renderY, 0.0)
@@ -407,6 +428,8 @@ class Arraylist(
                                         "Random" -> moduleColor
                                         "Fade" -> bgFadeColor
                                         "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                        "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                        "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                         else -> backgroundCustomColor
                                     },
                                     roundedBackgroundRadius,
@@ -441,6 +464,8 @@ class Arraylist(
                                         "Random" -> moduleColor
                                         "Fade" -> textFadeColor
                                         "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                        "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                        "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                         else -> textCustomColor
                                     },
                                     textShadow,
@@ -471,6 +496,8 @@ class Arraylist(
                                             "Random" -> moduleColor
                                             "Fade" -> tagsFadeColor
                                             "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                            "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                            "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                             else -> tagsCustomColor
                                         },
                                         textShadow,
@@ -498,6 +525,8 @@ class Arraylist(
                                         "Random" -> moduleColor
                                         "Fade" -> rectFadeColor
                                         "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                        "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                        "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                         else -> rectCustomColor
                                     }
 
@@ -564,17 +593,30 @@ class Arraylist(
                         if (blur && module.slide > 0) {
                             val blurX = renderX.toFloat() + if (rectMode == "Left") 1f else 0f
                             val blurY = renderY.toFloat() + yPos
-                            val blurWidth = textWidth + if (rectMode == "Right") 4 else 1
+                            val blurWidth = (textWidth + if (rectMode == "Right") 4 else 1).toFloat()
                             val blurHeight = textSpacer
 
                             GL11.glPushMatrix()
                             GL11.glTranslated(-renderX, -renderY, 0.0)
                             GL11.glScalef(1F / scale, 1F / scale, 1F)
 
-                            BlurUtils.blurArea(
-                                blurX, blurY, blurX + blurWidth, blurY + blurHeight,
-                                blurStrength
-                            )
+                            try {
+                                EmbeddedStencil.checkSetupFBO(mc.framebuffer)
+                                EmbeddedStencil.write(false)
+                                drawRoundedRect(
+                                    blurX, blurY, blurX + blurWidth, blurY + blurHeight,
+                                    Color.WHITE.rgb, roundedBackgroundRadius,
+                                    if (rectMode == "Right") {
+                                        RenderUtils.RoundedCorners.NONE
+                                    } else {
+                                        RenderUtils.RoundedCorners.RIGHT_ONLY
+                                    }
+                                )
+                                EmbeddedStencil.erase(true)
+                                val scaledBlurRadius = blurStrength * (bgColors.color().alpha / 255f)
+                                InternalBlurShader.blurArea(blurX, blurY, blurWidth, blurHeight, scaledBlurRadius)
+                                EmbeddedStencil.dispose()
+                            } catch (_: Exception) {}
 
                             GL11.glScalef(scale, scale, scale)
                             GL11.glTranslated(renderX, renderY, 0.0)
@@ -613,6 +655,8 @@ class Arraylist(
                                         "Random" -> moduleColor
                                         "Fade" -> bgFadeColor
                                         "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                        "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                        "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                         else -> backgroundCustomColor
                                     },
                                     roundedBackgroundRadius,
@@ -643,6 +687,9 @@ class Arraylist(
                                         "Rainbow" -> 0
                                         "Random" -> moduleColor
                                         "Fade" -> textFadeColor
+                                        "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                        "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                        "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                         else -> textCustomColor
                                     }, textShadow
                                 )
@@ -672,6 +719,8 @@ class Arraylist(
                                             "Random" -> moduleColor
                                             "Fade" -> tagsFadeColor
                                             "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                            "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                            "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                             else -> tagsCustomColor
                                         }, textShadow
                                     )
@@ -698,6 +747,8 @@ class Arraylist(
                                         "Random" -> moduleColor
                                         "Fade" -> rectFadeColor
                                         "Theme" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor(index).rgb
+                                        "Sky" -> ColorUtils.skyRainbow(index, skySaturation, skyBrightness, skySpeed).rgb
+                                        "Mixer" -> getMixedColor(index, mixerSeconds).rgb
                                         else -> rectCustomColor
                                     }
 

@@ -11,7 +11,7 @@ import net.minecraft.init.Blocks
 import net.minecraft.network.play.server.S2CPacketSpawnGlobalEntity
 import net.minecraft.util.EnumParticleTypes
 
-object AttackEffects : Module("AttackEffects", Category.RENDER) {
+object AttackEffect2 : Module("AttackEffect2", Category.RENDER, spacedName = "Attack Effect 2") {
 
     private val particle by choices(
         "Particle",

@@ -34,6 +34,7 @@ import net.ccbluex.liquidbounce.utils.render.ColorSettingsInteger
 import net.ccbluex.liquidbounce.utils.render.ColorUtils
 import net.ccbluex.liquidbounce.utils.render.ColorUtils.withAlpha
 import net.ccbluex.liquidbounce.utils.render.RenderUtils
+import net.ccbluex.liquidbounce.features.module.modules.render.getMixedColor
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorder
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
 import net.ccbluex.liquidbounce.utils.render.shader.shaders.GradientFontShader
@@ -128,10 +129,15 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
 
     private var displayString by text("DisplayText", "")
 
-    private val textColorMode by choices("Text-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme"), "Theme")
+    private val textColorMode by choices("Text-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Theme")
     private val themeGradientMode by choices("Theme-GradientMode", arrayOf("Sync", "LeftToRight", "RightToLeft"), "RightToLeft") { textColorMode == "Theme" || backgroundMode == "Theme" }
 
     private val colors = ColorSettingsInteger(this, "TextColor", applyMax = true) { textColorMode == "Custom" }
+
+    private val skySaturation by float("Sky-Saturation", 0.9f, 0f..1f) { textColorMode == "Sky" || backgroundMode == "Sky" }
+    private val skyBrightness by float("Sky-Brightness", 1f, 0f..1f) { textColorMode == "Sky" || backgroundMode == "Sky" }
+    private val skySpeed by float("Sky-Speed", 1f, 0.1f..5f) { textColorMode == "Sky" || backgroundMode == "Sky" }
+    private val mixerSeconds by int("Mixer-Seconds", 2, 1..10) { textColorMode == "Mixer" || backgroundMode == "Mixer" }
 
     private val gradientTextSpeed by float("Text-Gradient-Speed", 1f, 0.5f..10f) { textColorMode == "Gradient" }
 
@@ -144,7 +150,7 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
 
     private var backgroundScale by float("Background-Scale", 1F, 1F..3F)
 
-    private val backgroundMode by choices("Background-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme"), "Custom")
+    private val backgroundMode by choices("Background-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Custom")
 
     private val bgColors = ColorSettingsInteger(this, "BackgroundColor")
     { backgroundMode == "Custom" }.with(a = 0)
@@ -394,6 +400,10 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
             animSlideX = 0F
         }
         
+        if (!enableAnimation && !isCurrentlyRendering) {
+            return Border(0F, 0F, 0F, 0F)
+        }
+        
         lastShouldRender = isCurrentlyRendering
         
         val blockScale = if (shouldRender) 2.5F else 1F
@@ -421,7 +431,8 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
         )
 
         assumeNonVolatile {
-            if (isCurrentlyRendering) {
+            val shouldDraw = isCurrentlyRendering || (enableAnimation && (animAlpha > 0.01f || animScale > 0.01f))
+            if (shouldDraw) {
                 glPushMatrix()
                 
                 if (enableAnimation) {
@@ -433,6 +444,12 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
                     glTranslatef(-centerX, -centerY, 0F)
                     
                     glTranslatef(animSlideX, 0F, 0F)
+                    
+                    if (animationType == "Fade" || animationType == "Slide" || animationType == "Zoom") {
+                        glEnable(GL_BLEND)
+                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+                        glColor4f(1f, 1f, 1f, animAlpha)
+                    }
                 }
                 
                 val rainbow = textColorMode == "Rainbow"
@@ -524,6 +541,8 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
                                 "Gradient" -> 0
                                 "Rainbow" -> 0
                                 "Theme" -> if (themeGradientMode == "Sync") net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor().rgb else 0
+                                "Sky" -> ColorUtils.skyRainbow(0, skySaturation, skyBrightness, skySpeed).rgb
+                                "Mixer" -> getMixedColor(0, mixerSeconds).rgb
                                 else -> bgColors.color().rgb
                             },
                             roundedBackgroundRadius
@@ -578,6 +597,8 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
                     rainbow || gradient -> 0
                     textColorMode == "Theme" && themeGradientMode == "Sync" -> net.ccbluex.liquidbounce.utils.client.ClientThemesUtils.getColor().rgb
                     textColorMode == "Theme" -> 0
+                    textColorMode == "Sky" -> ColorUtils.skyRainbow(0, skySaturation, skyBrightness, skySpeed).rgb
+                    textColorMode == "Mixer" -> getMixedColor(0, mixerSeconds).rgb
                     else -> color.rgb
                 }
 
@@ -626,6 +647,11 @@ class Text(x: Double = 10.0, y: Double = 10.0, scale: Float = 1F, side: Side = S
                             fontRenderer.drawString("_", width - underscoreWidth, 0F, colorToUse, shadow)
                         }
                     }
+                }
+                
+                if (enableAnimation && (animationType == "Fade" || animationType == "Slide" || animationType == "Zoom")) {
+                    glColor4f(1f, 1f, 1f, 1f)
+                    glDisable(GL_BLEND)
                 }
                 
                 glPopMatrix()

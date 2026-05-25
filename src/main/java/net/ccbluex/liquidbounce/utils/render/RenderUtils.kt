@@ -1172,6 +1172,28 @@ object RenderUtils : MinecraftInstance {
         disableBlend()
     }
 
+    fun drawCircle(x: Float, y: Float, radius: Float, lineWidth: Float, start: Int, end: Int, color: Color) {
+        enableBlend()
+        disableTexture2D()
+        tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO)
+        glColor(color)
+        glEnable(GL_LINE_SMOOTH)
+        glLineWidth(lineWidth)
+        glBegin(GL_LINE_STRIP)
+        var i = end.toFloat()
+        while (i >= start) {
+            val rad = i.toRadians()
+            glVertex2f(
+                x + cos(rad) * (radius * 1.001f), y + sin(rad) * (radius * 1.001f)
+            )
+            i -= 360 / 90f
+        }
+        glEnd()
+        glDisable(GL_LINE_SMOOTH)
+        enableTexture2D()
+        disableBlend()
+    }
+
     fun drawFilledCircle(xx: Int, yy: Int, radius: Float, color: Color) {
         val sections = 50
         val dAngle = 2 * Math.PI / sections
@@ -2202,5 +2224,203 @@ object RenderUtils : MinecraftInstance {
 
     fun drawEntityOnScreen(posX: Int, posY: Int, scale: Int, entity: EntityLivingBase) {
         drawEntityOnScreen(posX.toDouble(), posY.toDouble(), scale.toFloat(), entity)
+    }
+
+    private val frustrum = net.minecraft.client.renderer.culling.Frustum()
+
+    fun isInViewFrustrum(entity: Entity): Boolean {
+        return isInViewFrustrum(entity.entityBoundingBox) || entity.ignoreFrustumCheck
+    }
+
+    private fun isInViewFrustrum(bb: net.minecraft.util.AxisAlignedBB): Boolean {
+        val current = mc.renderViewEntity
+        frustrum.setPosition(current.posX, current.posY, current.posZ)
+        return frustrum.isBoundingBoxInFrustum(bb)
+    }
+
+    fun isBBInFrustum(aabb: net.minecraft.util.AxisAlignedBB): Boolean {
+        val player = mc.thePlayer
+        frustrum.setPosition(player.posX, player.posY, player.posZ)
+        return frustrum.isBoundingBoxInFrustum(aabb)
+    }
+
+    fun renderParticles(particles: List<AttackParticle>, color: Color) {
+        glEnable(GL_BLEND)
+        glDisable(GL_TEXTURE_2D)
+        glEnable(GL_LINE_SMOOTH)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        val currentMillis = System.currentTimeMillis()
+        var i = 0
+
+        try {
+            for (particle in particles) {
+                val v = particle.position
+                var draw = true
+                val aOffset = ((currentMillis + (++i).toLong() * 100L) % 2000L) / 1000.0f
+                val x = v.xCoord - mc.renderManager.renderPosX
+                val y = v.yCoord - mc.renderManager.renderPosY
+                val z = v.zCoord - mc.renderManager.renderPosZ
+                val distanceFromPlayer = mc.thePlayer.getDistance(v.xCoord, v.yCoord - 1.0, v.zCoord)
+                var quality = (distanceFromPlayer * 4.0 + 10.0).toInt()
+                if (quality > 350) {
+                    quality = 350
+                }
+
+                val bb = net.minecraft.util.AxisAlignedBB(v.xCoord - 0.1, v.yCoord - 0.1, v.zCoord - 0.1, v.xCoord + 0.1, v.yCoord + 0.1, v.zCoord + 0.1)
+                if (!isBBInFrustum(bb)) {
+                    draw = false
+                }
+                if (i % 10 != 0 && distanceFromPlayer > 25.0) {
+                    draw = false
+                }
+                if (i % 3 == 0 && distanceFromPlayer > 15.0) {
+                    draw = false
+                }
+                if (!draw) continue
+
+                glPushMatrix()
+                glTranslated(x, y, z)
+                glScalef(-0.04f, -0.04f, -0.04f)
+                glRotated(-mc.renderManager.playerViewY.toDouble(), 0.0, 1.0, 0.0)
+                glRotated(mc.renderManager.playerViewX.toDouble(), if (mc.gameSettings.thirdPersonView == 2) -1.0 else 1.0, 0.0, 0.0)
+
+                val c = color
+                glDrawTriangle(0.0, -1.5, -1.0, 0.0, 1.0, 0.0, c.rgb)
+
+                if (distanceFromPlayer < 4.0) {
+                    glDrawTriangle(0.0, -1.5, -1.0, 0.0, 1.0, 0.0, Color(c.red, c.green, c.blue, 50).rgb)
+                }
+                if (distanceFromPlayer < 20.0) {
+                    glDrawTriangle(0.0, -1.5, -1.0, 0.0, 1.0, 0.0, Color(c.red, c.green, c.blue, 30).rgb)
+                }
+
+                glScalef(0.8f, 0.8f, 0.8f)
+                glPopMatrix()
+            }
+        } catch (e: ConcurrentModificationException) {
+        }
+
+        glDisable(GL_LINE_SMOOTH)
+        glEnable(GL_TEXTURE_2D)
+        glDisable(GL_BLEND)
+        glColor3d(255.0, 255.0, 255.0)
+    }
+
+    private fun glDrawTriangle(x: Double, y: Double, x1: Double, y1: Double, x2: Double, y2: Double, colour: Int) {
+        glDisable(GL_TEXTURE_2D)
+        val restore = glEnableBlend()
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+        glColour(colour)
+        glBegin(GL_TRIANGLES)
+        glVertex2d(x, y)
+        glVertex2d(x1, y1)
+        glVertex2d(x2, y2)
+        glEnd()
+        glEnable(GL_TEXTURE_2D)
+        glRestoreBlend(restore)
+        glDisable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_DONT_CARE)
+    }
+
+    private fun glEnableBlend(): Boolean {
+        val wasEnabled = glIsEnabled(GL_BLEND)
+        if (!wasEnabled) {
+            glEnable(GL_BLEND)
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO)
+        }
+        return wasEnabled
+    }
+
+    private fun glColour(color: Int) {
+        glColor4ub(
+            ((color shr 16 and 0xFF).toByte()),
+            ((color shr 8 and 0xFF).toByte()),
+            ((color and 0xFF).toByte()),
+            ((color shr 24 and 0xFF).toByte())
+        )
+    }
+
+    private fun glRestoreBlend(wasEnabled: Boolean) {
+        if (!wasEnabled) {
+            glDisable(GL_BLEND)
+        }
+    }
+
+    fun drawGradientSideways(left: Double, top: Double, right: Double, bottom: Double, col1: Int, col2: Int) {
+        val f = (col1 shr 24 and 0xFF) / 255.0f
+        val f2 = (col1 shr 16 and 0xFF) / 255.0f
+        val f3 = (col1 shr 8 and 0xFF) / 255.0f
+        val f4 = (col1 and 0xFF) / 255.0f
+        val f5 = (col2 shr 24 and 0xFF) / 255.0f
+        val f6 = (col2 shr 16 and 0xFF) / 255.0f
+        val f7 = (col2 shr 8 and 0xFF) / 255.0f
+        val f8 = (col2 and 0xFF) / 255.0f
+        glEnable(GL_BLEND)
+        glDisable(GL_TEXTURE_2D)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glEnable(GL_LINE_SMOOTH)
+        glShadeModel(GL_SMOOTH)
+        glPushMatrix()
+        glBegin(GL_QUADS)
+        glColor4f(f2, f3, f4, f)
+        glVertex2d(left, top)
+        glVertex2d(left, bottom)
+        glColor4f(f6, f7, f8, f5)
+        glVertex2d(right, bottom)
+        glVertex2d(right, top)
+        glEnd()
+        glPopMatrix()
+        glEnable(GL_TEXTURE_2D)
+        glDisable(GL_BLEND)
+        glDisable(GL_LINE_SMOOTH)
+        glShadeModel(GL_FLAT)
+    }
+
+    fun drawTriAngle(cx: Float, cy: Float, r: Float, n: Float, color: Color, polygon: Boolean) {
+        var cx = cx * 2.0f
+        var cy = cy * 2.0f
+        val b = 6.2831852 / n
+        val p = Math.cos(b)
+        val s = Math.sin(b)
+        var r = r * 2.0f
+        var x = r.toDouble()
+        var y = 0.0
+
+        val tessellator = Tessellator.getInstance()
+        val worldrenderer = tessellator.worldRenderer
+        glLineWidth(1F)
+        glEnable(GL_LINE_SMOOTH)
+        GlStateManager.enableBlend()
+        GlStateManager.disableTexture2D()
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0)
+        GlStateManager.resetColor()
+        glColor(color)
+        GlStateManager.scale(0.5f, 0.5f, 0.5f)
+        worldrenderer.begin(if (polygon) GL_POLYGON else GL_LINE_LOOP, DefaultVertexFormats.POSITION)
+        var ii = 0
+        while (ii < n.toInt()) {
+            worldrenderer.pos(x + cx, y + cy, 0.0).endVertex()
+            val t = x
+            x = p * x - s * y
+            y = s * t + p * y
+            ii++
+        }
+        tessellator.draw()
+        GlStateManager.enableTexture2D()
+        GlStateManager.disableBlend()
+        GlStateManager.scale(2f, 2f, 2f)
+        GlStateManager.color(1f, 1f, 1f, 1f)
+    }
+
+    fun scaleStart(x: Float, y: Float, scale: Float) {
+        glTranslatef(x, y, 0f)
+        glScalef(scale, scale, 1f)
+        glTranslatef(-x, -y, 0f)
+    }
+
+    fun scaleEnd() {
+        glPopMatrix()
     }
 }

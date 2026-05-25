@@ -84,6 +84,14 @@ object Fonts : MinecraftInstance {
     lateinit var fontZenDots40: GameFontRenderer
     lateinit var fontZenDots50: GameFontRenderer
 
+    lateinit var fontRobotoRegular35: GameFontRenderer
+    lateinit var fontRobotoRegular40: GameFontRenderer
+    lateinit var fontRobotoBold35: GameFontRenderer
+    lateinit var fontRobotoBold40: GameFontRenderer
+    lateinit var fontSFApple35: GameFontRenderer
+    lateinit var fontSFApple40: GameFontRenderer
+    lateinit var fontSFApple50: GameFontRenderer
+
     @JvmStatic
     val font24: GameFontRenderer by lazy { fontRegular30 }
     @JvmStatic
@@ -278,6 +286,41 @@ object Fonts : MinecraftInstance {
             fontZenDots50 = register(
                 FontInfo(name = "Zen Dots", size = 50),
                 getFontOrDefault("ZenDots-Regular.ttf", 50).asGameFontRenderer()
+            )
+
+            fontRobotoRegular35 = register(
+                FontInfo(name = "Roboto Regular", size = 35),
+                getFontOrDefault("roboto-regular.ttf", 35).asGameFontRenderer()
+            )
+
+            fontRobotoRegular40 = register(
+                FontInfo(name = "Roboto Regular", size = 40),
+                getFontOrDefault("roboto-regular.ttf", 40).asGameFontRenderer()
+            )
+
+            fontRobotoBold35 = register(
+                FontInfo(name = "Roboto Bold", size = 35),
+                getFontOrDefault("Roboto-Bold.ttf", 35).asGameFontRenderer()
+            )
+
+            fontRobotoBold40 = register(
+                FontInfo(name = "Roboto Bold", size = 40),
+                getFontOrDefault("Roboto-Bold.ttf", 40).asGameFontRenderer()
+            )
+
+            fontSFApple35 = register(
+                FontInfo(name = "SF Apple", size = 35),
+                getFontOrDefault("SFApple.ttf", 35).asGameFontRenderer()
+            )
+
+            fontSFApple40 = register(
+                FontInfo(name = "SF Apple", size = 40),
+                getFontOrDefault("SFApple.ttf", 40).asGameFontRenderer()
+            )
+
+            fontSFApple50 = register(
+                FontInfo(name = "SF Apple", size = 50),
+                getFontOrDefault("SFApple.ttf", 50).asGameFontRenderer()
             )
 
             loadCustomFonts()

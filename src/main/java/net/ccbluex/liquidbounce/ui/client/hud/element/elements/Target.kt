@@ -11,9 +11,13 @@ import net.ccbluex.liquidbounce.ui.client.hud.element.ElementInfo
 import net.ccbluex.liquidbounce.ui.font.Fonts
 import net.ccbluex.liquidbounce.utils.GlowUtils
 import net.ccbluex.liquidbounce.utils.render.BlurUtils
+import net.ccbluex.liquidbounce.utils.render.EmbeddedStencil
+import net.ccbluex.liquidbounce.utils.render.InternalBlurShader
 import net.ccbluex.liquidbounce.utils.render.ColorUtils
 import net.ccbluex.liquidbounce.utils.render.RenderUtils
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.deltaTime
+import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawHead
+import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorderRect
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.withClipping
 import net.ccbluex.liquidbounce.utils.render.Stencil
@@ -174,6 +178,8 @@ class Target : Element("Target"), Listenable {
     private val opaiBackGroundAlpha by int("Opai-BackGroundAlpha",120,0..255) { hudStyle == "Opai" }
     private val opaiShadowCheck by boolean("Opai-ShadowCheck",false) { hudStyle == "Opai" }
     private val opaiShadowStrengh by float("Opai-shadowStrengh",0.5f,0.0f..1.0f) { hudStyle == "Opai" && opaiShadowCheck }
+    private val opaiBlurCheck by boolean("Opai-BlurCheck", true) { hudStyle == "Opai" }
+    private val opaiBlurRadius by float("Opai-BlurStrength", 10f, 1f..50f) { hudStyle == "Opai" && opaiBlurCheck }
     private val opaiVanishDelay by int("Opai-VanishDelay", 300, 0..500) { hudStyle == "Opai" }
 
     private val augustusBackgroundAlpha by int("Augustus-BackgroundAlpha", 60, 0..255) { hudStyle == "Augustus" }
@@ -1371,54 +1377,142 @@ class Target : Element("Target"), Listenable {
 
         if (!shouldRender && opaiDelayCounter >= opaiVanishDelay) return Border(0f, 0f, 0f, 0f)
 
-        val targetName = target?.name + "  "
-        val targetNameWidth = Fonts.fontSemibold35.getStringWidth(targetName)
-        val targetHealth = target?.health?.toInt() ?: 0
-        val targetHealthWidth = Fonts.fontSemibold35.getStringWidth(targetHealth.toString())
+        val entity = target as? EntityLivingBase ?: return Border(0f, 0f, 0f, 0f)
+        
+        val targetName = entity.name + "  "
+        val targetNameWidth = Fonts.fontRegular35.getStringWidth(targetName)
+        val targetHealth = entity.health.toInt()
+        val targetHealthWidth = Fonts.fontRegular35.getStringWidth(targetHealth.toString())
         val textsDrawBegin = 3.5f + 30f + 3.5f
         val allTextLen = targetNameWidth + targetHealthWidth
-        val resultProgressWidth = max(135f, textsDrawBegin + allTextLen + 8f)
-        val publicXY: Pair<Float, Float> = Pair(3.5f * 2 + resultProgressWidth, 3.5f + 30f + 3.5f + 5f + 3.5f)
+        val resultProgressWidth = maxOf(135f, textsDrawBegin + allTextLen + 8f)
+        val panelWidth = 3.5f * 2 + resultProgressWidth
+        val panelHeight = 3.5f + 30f + 3.5f + 5f + 3.5f
+        val currentRadius = 5f
+
+        val progressBarLength = resultProgressWidth / entity.maxHealth * entity.health
+        opaiAnimX = AnimationUtil.base(opaiAnimX.toDouble(), progressBarLength.toDouble(), 0.2).toFloat()
 
         GlStateManager.pushMatrix()
         GlStateManager.translate(x, y, 0F)
         GlStateManager.scale(slideIn, slideIn, slideIn)
 
-        if (opaiShadowCheck) {
-            ShowShadow(0f, 0f, publicXY.first, publicXY.second, opaiShadowStrengh)
+        try {
+            EmbeddedStencil.checkSetupFBO(mc.framebuffer)
+            EmbeddedStencil.write(false)
+            RenderUtils.drawRoundedRect(0f, 0f, panelWidth, panelHeight, Color.WHITE.rgb, currentRadius)
+
+            EmbeddedStencil.erase(false)
+            if (opaiShadowCheck) {
+                val maxDist = (opaiShadowStrengh * 13f).toInt()
+                for (i in maxDist downTo 1) {
+                    val alpha = (100 * (1f - i.toFloat() / (maxDist + 1))).toInt().coerceIn(1, 100)
+                    RenderUtils.drawRoundedRect(
+                        -i.toFloat(), -i.toFloat(),
+                        panelWidth + i.toFloat(), panelHeight + i.toFloat(),
+                        Color(opaiThemeColor.red, opaiThemeColor.green, opaiThemeColor.blue, alpha).rgb,
+                        currentRadius + i.toFloat()
+                    )
+                }
+            }
+
+            EmbeddedStencil.erase(true)
+            if (opaiBlurCheck) {
+                GlStateManager.popMatrix()
+                glPushMatrix()
+                glTranslated(-renderX, -renderY, 0.0)
+                glScalef(1F / scale, 1F / scale, 1F)
+                val absX = renderX.toFloat() + x
+                val absY = renderY.toFloat() + y
+                InternalBlurShader.blurArea(absX, absY, panelWidth * slideIn, panelHeight * slideIn, opaiBlurRadius)
+                glScalef(scale, scale, scale)
+                glTranslated(renderX, renderY, 0.0)
+                glPopMatrix()
+                GlStateManager.pushMatrix()
+                GlStateManager.translate(x, y, 0F)
+                GlStateManager.scale(slideIn, slideIn, slideIn)
+            }
+
+            RenderUtils.drawRoundedBorderRect(0f, 0f, panelWidth, panelHeight, 0.2f,
+                Color(0, 0, 0, opaiBackGroundAlpha).rgb, Color(0, 0, 0, opaiBackGroundAlpha).rgb, currentRadius)
+
+            EmbeddedStencil.dispose()
+
+            glDisable(GL_TEXTURE_2D)
+            glEnable(GL_BLEND)
+            glEnable(GL_LINE_SMOOTH)
+            glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+            glLineWidth(1.5f)
+            RenderUtils.drawRoundedBorderRect(-0.5f, -0.5f, panelWidth + 0.5f, panelHeight + 0.5f,
+                0.5f, Color(0, 0, 0, 0).rgb, Color(255, 255, 255, 35).rgb, currentRadius + 0.5f)
+            glLineWidth(1.0f)
+            glDisable(GL_LINE_SMOOTH)
+            glEnable(GL_TEXTURE_2D)
+
+        } catch (e: Exception) {
+            if (opaiShadowCheck) {
+                val maxDist = (opaiShadowStrengh * 13f).toInt()
+                for (i in maxDist downTo 1) {
+                    val alpha = (100 * (1f - i.toFloat() / (maxDist + 1))).toInt().coerceIn(1, 100)
+                    RenderUtils.drawRoundedRect(
+                        -i.toFloat(), -i.toFloat(),
+                        panelWidth + i.toFloat(), panelHeight + i.toFloat(),
+                        Color(opaiThemeColor.red, opaiThemeColor.green, opaiThemeColor.blue, alpha).rgb,
+                        currentRadius + i.toFloat()
+                    )
+                }
+            }
+            RenderUtils.drawRoundedBorderRect(0f, 0f, panelWidth, panelHeight, 0.2f,
+                Color(0, 0, 0, opaiBackGroundAlpha).rgb, Color(0, 0, 0, opaiBackGroundAlpha).rgb, currentRadius)
         }
 
-        RenderUtils.drawRoundedBorderRect(0f, 0f, publicXY.first - 3.5f, publicXY.second, 0.2f,
-            Color(0, 0, 0, opaiBackGroundAlpha).rgb, Color(0, 0, 0, opaiBackGroundAlpha).rgb, 5f)
-
-        if (target != null && target is EntityLivingBase) {
-            drawOpaiHead(target, 3.5f, 3.5f)
+        val headTexture = mc.renderManager.getEntityRenderObject<Entity>(entity)
+            ?.getEntityTexture(entity)
+        if (headTexture != null) {
+            val headX = 3.5f
+            val headY = 3.5f
+            val headSize = 30f
+            val headRadius = 5f
+            EmbeddedStencil.checkSetupFBO(mc.framebuffer)
+            EmbeddedStencil.write(false)
+            RenderUtils.drawRoundedRect(headX, headY, headX + headSize, headY + headSize, Color.WHITE.rgb, headRadius)
+            EmbeddedStencil.erase(true)
+            RenderUtils.drawHead(
+                headTexture, headX.toInt(), headY.toInt(),
+                8f, 8f, 8, 8, headSize.toInt(), headSize.toInt(), 64f, 64f, Color.WHITE
+            )
+            EmbeddedStencil.dispose()
         }
 
-        val progressBarLength = if (target != null) resultProgressWidth / target.maxHealth * target.health else 0f
-        opaiAnimX = AnimationUtil.base(opaiAnimX.toDouble(), progressBarLength.toDouble(), 0.2).toFloat()
+        RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, resultProgressWidth, 3.5f + 30f + 3.5f + 5f,
+            0.3f, Color(0, 0, 0, 200).rgb, Color(0, 0, 0, 200).rgb, 5f)
 
-        RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, resultProgressWidth, 3.5f + 30f + 3.5f + 5f, 0.3f,
-            Color(0, 0, 0, 200).rgb, Color(0, 0, 0, 200).rgb, 5f)
+        RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, opaiAnimX, 3.5f + 30f + 3.5f + 5f,
+            0.3f, Color(opaiThemeColor.red, opaiThemeColor.green, opaiThemeColor.blue, 150).rgb,
+            Color(opaiThemeColor.red, opaiThemeColor.green, opaiThemeColor.blue, 150).rgb, 4f)
 
-        RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, opaiAnimX, 3.5f + 30f + 3.5f + 5f, 0.3f,
-            Color(opaiThemeColor.red, opaiThemeColor.green, opaiThemeColor.blue, 150).rgb,
-            Color(opaiThemeColor.red, opaiThemeColor.green, opaiThemeColor.blue, 150).rgb, 4F)
+        RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, progressBarLength, 3.5f + 30f + 3.5f + 5f,
+            0.3f, opaiThemeColor.rgb, opaiThemeColor.rgb, 4f)
 
-        RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, progressBarLength, 3.5f + 30f + 3.5f + 5f, 0.3f,
-            opaiThemeColor.rgb, opaiThemeColor.rgb, 4F)
+        Fonts.fontRegular35.drawString(targetName, textsDrawBegin + 3.5f, 3.5f * 2, Color.WHITE.rgb)
+        Fonts.fontRegular35.drawString(targetHealth.toString(), textsDrawBegin + targetNameWidth + 3.5f, 3.5f * 2 - 1F, opaiThemeColor.rgb)
 
-        Fonts.fontSemibold35.drawString(targetName, textsDrawBegin + 3.5f, 3.5f * 2, Color.WHITE.rgb)
-        Fonts.fontSemibold35.drawString(targetHealth.toString(), textsDrawBegin + targetNameWidth + 3.5f, 3.5f * 2 - 1F, opaiThemeColor.rgb)
-
-        if (target != null) {
-            val armorX = textsDrawBegin
-            val armorY = 3.5f + 30f - 18
-            drawOpaiArmor(armorX, armorY, target)
+        if (entity is EntityPlayer) {
+            glEnable(GL_TEXTURE_2D)
+            GlStateManager.color(1F, 1F, 1F, 1F)
+            enableGUIStandardItemLighting()
+            var armorX = textsDrawBegin
+            for (index in 3 downTo 0) {
+                val stack = entity.inventory.armorInventory[index] ?: continue
+                mc.renderItem.renderItemIntoGUI(stack, armorX.toInt(), (3.5f + 30f - 18).toInt())
+                mc.renderItem.renderItemOverlays(mc.fontRendererObj, stack, armorX.toInt(), (3.5f + 30f - 18).toInt())
+                armorX += 18f
+            }
+            disableStandardItemLighting()
         }
 
         GlStateManager.popMatrix()
-        return Border(x, y, x + publicXY.first, y + publicXY.second)
+        return Border(x, y, x + panelWidth, y + panelHeight)
     }
 
     private fun drawOpaiHead(target: EntityLivingBase, x: Float, y: Float) {

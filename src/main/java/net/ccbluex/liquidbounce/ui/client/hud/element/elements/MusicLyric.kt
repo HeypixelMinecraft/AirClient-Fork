@@ -9,6 +9,7 @@ import net.ccbluex.liquidbounce.ui.font.Fonts
 import net.ccbluex.liquidbounce.utils.render.BlurUtils
 import net.ccbluex.liquidbounce.utils.render.ColorSettingsFloat
 import net.ccbluex.liquidbounce.utils.render.ColorSettingsInteger
+import net.ccbluex.liquidbounce.utils.render.ColorUtils
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorder
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
 import net.ccbluex.liquidbounce.utils.render.shader.shaders.GradientFontShader
@@ -17,6 +18,7 @@ import net.ccbluex.liquidbounce.utils.render.shader.shaders.RainbowFontShader
 import net.ccbluex.liquidbounce.utils.render.shader.shaders.RainbowShader
 import net.ccbluex.liquidbounce.utils.render.toColorArray
 import net.ccbluex.liquidbounce.utils.client.ClientThemesUtils
+import net.ccbluex.liquidbounce.features.module.modules.render.getMixedColor
 import org.lwjgl.opengl.GL11.*
 import java.awt.Color
 
@@ -35,11 +37,16 @@ class MusicLyric(x: Double = 10.0, y: Double = 100.0, scale: Float = 1F, side: S
 
     private val textPositionMode by choices("Text-Position", arrayOf("Left", "Center"), "Center")
 
-    private val textColorMode by choices("Text-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme"), "Gradient")
+    private val textColorMode by choices("Text-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Gradient")
     private val themeGradientMode by choices("Theme-GradientMode", arrayOf("Sync", "LeftToRight", "RightToLeft"), "Sync") { textColorMode == "Theme" || backgroundMode == "Theme" }
 
     private val colors = ColorSettingsInteger(this, "TextColor", applyMax = true) { textColorMode == "Custom" }
         .with(r = 255, g = 255, b = 255, a = 255)
+
+    private val skySaturation by float("Sky-Saturation", 0.9f, 0f..1f) { textColorMode == "Sky" || backgroundMode == "Sky" }
+    private val skyBrightness by float("Sky-Brightness", 1f, 0f..1f) { textColorMode == "Sky" || backgroundMode == "Sky" }
+    private val skySpeed by float("Sky-Speed", 1f, 0.1f..5f) { textColorMode == "Sky" || backgroundMode == "Sky" }
+    private val mixerSeconds by int("Mixer-Seconds", 2, 1..10) { textColorMode == "Mixer" || backgroundMode == "Mixer" }
 
     private val gradientTextSpeed by float("Text-Gradient-Speed", 1f, 0.5f..10f) { textColorMode == "Gradient" }
 
@@ -52,7 +59,7 @@ class MusicLyric(x: Double = 10.0, y: Double = 100.0, scale: Float = 1F, side: S
 
     private var backgroundScale by float("Background-Scale", 1.2F, 1F..3F)
 
-    private val backgroundMode by choices("Background-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme"), "Custom")
+    private val backgroundMode by choices("Background-ColorMode", arrayOf("Custom", "Rainbow", "Gradient", "Theme", "Sky", "Mixer"), "Custom")
 
     private val bgColors = ColorSettingsInteger(this, "BackgroundColor")
     { backgroundMode == "Custom" }.with(r = 0, g = 0, b = 0, a = 150)
@@ -270,6 +277,14 @@ class MusicLyric(x: Double = 10.0, y: Double = 100.0, scale: Float = 1F, side: S
                             Color(0, 0, 0, (150 * alphaMultiplier).toInt())
                         }
                     }
+                    "Sky" -> {
+                        val skyColor = ColorUtils.skyRainbow(0, skySaturation, skyBrightness, skySpeed)
+                        Color(skyColor.red, skyColor.green, skyColor.blue, (150 * alphaMultiplier).toInt())
+                    }
+                    "Mixer" -> {
+                        val mixerColor = getMixedColor(0, mixerSeconds)
+                        Color(mixerColor.red, mixerColor.green, mixerColor.blue, (150 * alphaMultiplier).toInt())
+                    }
                     else -> Color(bgColors.color().red, bgColors.color().green, bgColors.color().blue, (bgColors.color().alpha * alphaMultiplier).toInt())
                 }
                 drawRoundedRect(
@@ -322,6 +337,8 @@ class MusicLyric(x: Double = 10.0, y: Double = 100.0, scale: Float = 1F, side: S
         val colorToUse = when {
             rainbow || gradient || themeGradient -> 0
             theme -> ClientThemesUtils.getColor().rgb
+            textColorMode == "Sky" -> ColorUtils.skyRainbow(0, skySaturation, skyBrightness, skySpeed).rgb
+            textColorMode == "Mixer" -> getMixedColor(0, mixerSeconds).rgb
             else -> {
                 val c = colors.color()
                 Color(c.red, c.green, c.blue, (c.alpha * alphaMultiplier).toInt()).rgb

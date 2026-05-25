@@ -29,6 +29,9 @@ import net.ccbluex.liquidbounce.utils.render.RenderUtils
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawImage
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorderRect
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
+import net.ccbluex.liquidbounce.utils.render.BlurEffects
+import net.ccbluex.liquidbounce.utils.render.EmbeddedStencil
+import net.ccbluex.liquidbounce.utils.render.InternalBlurShader
 import net.ccbluex.liquidbounce.utils.render.shader.shaders.GradientFontShader
 import net.minecraft.client.gui.ScaledResolution
 import net.minecraft.client.renderer.GlStateManager
@@ -76,10 +79,12 @@ object Island : Module("Island", Category.RENDER) {
     private val BackgroundAlpha by int("BackGroundAlpha", 160, 0..255)
 
     private val ShadowCheck by boolean("Shadow", false)
-    private val shadowRadiusValue by float("Shadow-Radius", 15F, 1F..50F)
+    private val shadowRadiusValue by float("Shadow-Radius", 15F, 1F..50F) { ShadowCheck }
+    private val shadowColor by color("Shadow-Color", Color(0, 0, 0, 120)) { ShadowCheck }
 
     private val blurCheck by boolean("Blur", true)
-    private val blurRadius by float("BlurStrength", 10F, 1F..50F)
+    private val blurMode by choices("BlurMode", arrayOf("Gaussian", "Dual", "Better"), "Better") { blurCheck }
+    private val blurRadius by float("BlurStrength", 10F, 1F..50F) { blurCheck }
 
     private val notifyDuration by int("NotifyTime(ms)", 1000, 100..10000)
     private val versionNameUp by text("VersionName", "development") { styles == "Opal" }
@@ -197,6 +202,16 @@ object Island : Module("Island", Category.RENDER) {
     private fun getSafePing(): Int {
         val player = mc.thePlayer ?: return 0
         return mc.netHandler?.getPlayerInfo(player.uniqueID)?.responseTime ?: 0
+    }
+
+    private fun applyBlur(x: Float, y: Float, w: Float, h: Float) {
+        GlStateManager.pushMatrix()
+        when (blurMode) {
+            "Gaussian" -> BlurEffects.blurArea(x, y, w, h, blurRadius, BlurEffects.BlurMode.GAUSSIAN)
+            "Dual" -> BlurEffects.blurArea(x, y, w, h, blurRadius, BlurEffects.BlurMode.DUAL)
+            "Better" -> BlurEffects.blurArea(x, y, w, h, blurRadius, BlurEffects.BlurMode.BETTER)
+        }
+        GlStateManager.popMatrix()
     }
 
     private fun spring(current: Float, target: Float, velocity: Float): Pair<Float, Float> {
@@ -552,13 +567,22 @@ object Island : Module("Island", Category.RENDER) {
                 RenderUtils.drawRoundedRect(drawX, drawY, drawX + drawW, drawY + drawH, Color.WHITE.rgb, currentRadius, islandCorners)
 
                 EmbeddedStencil.erase(false)
-                ShowShadow(drawX, drawY, drawW, drawH)
+                if (ShadowCheck) {
+                    val maxDist = shadowRadiusValue.toInt()
+                    for (i in maxDist downTo 1) {
+                        val alpha = (shadowColor.alpha * (1f - i.toFloat() / (maxDist + 1))).toInt().coerceIn(1, shadowColor.alpha)
+                        RenderUtils.drawRoundedRect(
+                            drawX - i, drawY - i,
+                            drawX + drawW + i, drawY + drawH + i,
+                            Color(shadowColor.red, shadowColor.green, shadowColor.blue, alpha).rgb,
+                            currentRadius + i
+                        )
+                    }
+                }
 
                 EmbeddedStencil.erase(true)
                 if (blurCheck) {
-                    GlStateManager.pushMatrix()
-                    InternalBlurShader.blurArea(drawX, drawY, drawW, drawH, blurRadius)
-                    GlStateManager.popMatrix()
+                    applyBlur(drawX, drawY, drawW, drawH)
                 }
 
                 RenderUtils.drawRoundedRect(
@@ -572,10 +596,37 @@ object Island : Module("Island", Category.RENDER) {
                 glEnable(GL_BLEND)
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
+                glDisable(GL_TEXTURE_2D)
+                glEnable(GL_LINE_SMOOTH)
+                glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+                glLineWidth(1.5f)
+                RenderUtils.drawRoundedBorderRect(
+                    drawX - 0.5f, drawY - 0.5f,
+                    drawX + drawW + 0.5f, drawY + drawH + 0.5f,
+                    0.5f,
+                    Color(0, 0, 0, 0).rgb,
+                    Color(255, 255, 255, 35).rgb,
+                    currentRadius + 0.5f
+                )
+                glLineWidth(1.0f)
+                glDisable(GL_LINE_SMOOTH)
+                glEnable(GL_TEXTURE_2D)
+
                 EmbeddedStencil.dispose()
 
             } catch (e: Exception) {
-                ShowShadow(drawX, drawY, drawW, drawH)
+                if (ShadowCheck) {
+                    val maxDist = shadowRadiusValue.toInt()
+                    for (i in maxDist downTo 1) {
+                        val alpha = (shadowColor.alpha * (1f - i.toFloat() / (maxDist + 1))).toInt().coerceIn(1, shadowColor.alpha)
+                        RenderUtils.drawRoundedRect(
+                            drawX - i, drawY - i,
+                            drawX + drawW + i, drawY + drawH + i,
+                            Color(shadowColor.red, shadowColor.green, shadowColor.blue, alpha).rgb,
+                            currentRadius + i
+                        )
+                    }
+                }
                 RenderUtils.drawRoundedRect(drawX, drawY, drawX + drawW, drawY + drawH, Color(0,0,0,BackgroundAlpha).rgb, currentRadius, islandCorners)
                 glEnable(GL_BLEND)
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -1442,7 +1493,7 @@ object Island : Module("Island", Category.RENDER) {
     }
 
     private fun ShowShadow(x: Float, y: Float, w: Float, h: Float) {
-        if (ShadowCheck) GlowUtils.drawGlow(x, y, w, h, shadowRadiusValue.toInt(), Color(0, 0, 0, 120))
+        if (ShadowCheck) GlowUtils.drawGlow(x, y, w, h, shadowRadiusValue.toInt(), shadowColor)
     }
 
     fun drawToggleButton(StartX: Float, StartY: Float, ContainerH: Float, ModuleState: Boolean, animationState: SwitchAnimationState) {
@@ -1676,9 +1727,7 @@ object Island : Module("Island", Category.RENDER) {
                 EmbeddedStencil.write(false)
                 RenderUtils.drawRoundedRect(bubbleX, bubbleY, bubbleX + AnimGlobalWidth, bubbleY + animBubbleHeight, Color.WHITE.rgb, 8F, RenderUtils.RoundedCorners.BOTTOM_ONLY)
                 EmbeddedStencil.erase(true)
-                GlStateManager.pushMatrix()
-                InternalBlurShader.blurArea(bubbleX, bubbleY, AnimGlobalWidth, animBubbleHeight, blurRadius)
-                GlStateManager.popMatrix()
+                applyBlur(bubbleX, bubbleY, AnimGlobalWidth, animBubbleHeight)
                 EmbeddedStencil.dispose()
             } catch (e: Exception) {
             }
@@ -1841,9 +1890,7 @@ object Island : Module("Island", Category.RENDER) {
                 EmbeddedStencil.write(false)
                 drawRoundedRect(bubbleX, bubbleY, bubbleX + animBubbleWidth, bubbleY + animBubbleHeight, Color.WHITE.rgb, 8F)
                 EmbeddedStencil.erase(true)
-                GlStateManager.pushMatrix()
-                InternalBlurShader.blurArea(bubbleX, bubbleY, animBubbleWidth, animBubbleHeight, blurRadius)
-                GlStateManager.popMatrix()
+                applyBlur(bubbleX, bubbleY, animBubbleWidth, animBubbleHeight)
                 EmbeddedStencil.dispose()
             } catch (e: Exception) {
             }
@@ -2114,9 +2161,7 @@ object Island : Module("Island", Category.RENDER) {
                 EmbeddedStencil.write(false)
                 drawRoundedRect(bubbleX, bubbleY, bubbleX + animBubbleWidth, bubbleY + animBubbleHeight, Color.WHITE.rgb, 14F)
                 EmbeddedStencil.erase(true)
-                GlStateManager.pushMatrix()
-                InternalBlurShader.blurArea(bubbleX, bubbleY, animBubbleWidth, animBubbleHeight, blurRadius)
-                GlStateManager.popMatrix()
+                applyBlur(bubbleX, bubbleY, animBubbleWidth, animBubbleHeight)
                 EmbeddedStencil.dispose()
             } catch (e: Exception) {
             }
@@ -2214,101 +2259,6 @@ object Island : Module("Island", Category.RENDER) {
             }
             drawRoundedRect(barStartX, barY, barStartX + maxBarWidth * progress, barY + barHeight, 
                 progressColor.rgb, 2F)
-        }
-    }
-
-    object InternalBlurShader {
-        private val mc = Minecraft.getMinecraft()
-        private var blurOutputFramebuffer: Framebuffer? = null
-        private var shaderProgramID: Int = -1
-        private var uniformTextureLocation = -1
-        private var uniformTexelSizeLocation = -1
-        private var uniformDirectionLocation = -1
-        private var uniformRadiusLocation = -1
-
-        fun blurArea(x: Float, y: Float, width: Float, height: Float, radius: Float) {
-            val sr = ScaledResolution(mc)
-            val factor = sr.scaleFactor
-            ensureShaderInitialized()
-            ensureFramebuffer(mc.displayWidth, mc.displayHeight)
-
-            val sX = (x * factor).toInt()
-            val sY = (mc.displayHeight - (y * factor).toInt() - (height * factor).toInt())
-            val sW = (width * factor).toInt()
-            val sH = (height * factor).toInt()
-
-            glEnable(GL_SCISSOR_TEST)
-            val pad = (radius * factor).toInt()
-            glScissor(sX - pad, sY - pad, sW + pad * 2, sH + pad * 2)
-
-            val buffer = blurOutputFramebuffer ?: return
-            val mainBuffer = mc.framebuffer
-
-            buffer.framebufferClear()
-            buffer.bindFramebuffer(true)
-            mainBuffer.bindFramebufferTexture()
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, 33071)
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, 33071)
-
-            GL20.glUseProgram(shaderProgramID)
-            GL20.glUniform2f(uniformTexelSizeLocation, 1.0f / mc.displayWidth, 1.0f / mc.displayHeight)
-            GL20.glUniform1i(uniformTextureLocation, 0)
-            GL20.glUniform1f(uniformRadiusLocation, radius)
-            GL20.glUniform2f(uniformDirectionLocation, 1.0f, 0.0f)
-            drawQuads()
-
-            mainBuffer.bindFramebuffer(true)
-            buffer.bindFramebufferTexture()
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, 33071)
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, 33071)
-
-            GL20.glUniform2f(uniformDirectionLocation, 0.0f, 1.0f)
-            drawQuads()
-
-            GL20.glUseProgram(0)
-            glDisable(GL_SCISSOR_TEST)
-        }
-
-        private fun ensureShaderInitialized() {
-            if (shaderProgramID != -1) return
-            val vertexShaderSrc = "#version 120\nvoid main() { gl_TexCoord[0] = gl_MultiTexCoord0; gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex; }"
-            val fragmentShaderSrc = "#version 120\nuniform sampler2D textureIn; uniform vec2 texelSize; uniform vec2 direction; uniform float radius;\nfloat gaussian(float x, float sigma) { return exp(-(x*x) / (2.0 * sigma * sigma)); }\nvoid main() { vec2 coord = gl_TexCoord[0].xy; vec4 sum = vec4(0.0); float totalWeight = 0.0; int range = int(min(radius, 50.0)); float sigma = radius / 2.0; for (int i = -range; i <= range; i++) { float weight = gaussian(float(i), sigma); vec2 offset = float(i) * texelSize * direction; sum += texture2D(textureIn, coord + offset) * weight; totalWeight += weight; } gl_FragColor = sum / totalWeight; }"
-            val vID = createShader(vertexShaderSrc, GL20.GL_VERTEX_SHADER)
-            val fID = createShader(fragmentShaderSrc, GL20.GL_FRAGMENT_SHADER)
-            shaderProgramID = GL20.glCreateProgram()
-            GL20.glAttachShader(shaderProgramID, vID)
-            GL20.glAttachShader(shaderProgramID, fID)
-            GL20.glLinkProgram(shaderProgramID)
-            GL20.glUseProgram(shaderProgramID)
-            uniformTextureLocation = GL20.glGetUniformLocation(shaderProgramID, "textureIn")
-            uniformTexelSizeLocation = GL20.glGetUniformLocation(shaderProgramID, "texelSize")
-            uniformDirectionLocation = GL20.glGetUniformLocation(shaderProgramID, "direction")
-            uniformRadiusLocation = GL20.glGetUniformLocation(shaderProgramID, "radius")
-            GL20.glUseProgram(0)
-        }
-        private fun ensureFramebuffer(w: Int, h: Int) {
-            if (blurOutputFramebuffer == null || blurOutputFramebuffer!!.framebufferWidth != w || blurOutputFramebuffer!!.framebufferHeight != h) {
-                blurOutputFramebuffer?.deleteFramebuffer()
-                blurOutputFramebuffer = Framebuffer(w, h, true)
-                blurOutputFramebuffer!!.setFramebufferFilter(9729)
-            }
-        }
-        private fun createShader(src: String, type: Int): Int {
-            val id = GL20.glCreateShader(type)
-            GL20.glShaderSource(id, src)
-            GL20.glCompileShader(id)
-            return id
-        }
-        private fun drawQuads() {
-            val sr = ScaledResolution(mc)
-            val w = sr.scaledWidth_double
-            val h = sr.scaledHeight_double
-            glBegin(GL_QUADS)
-            glTexCoord2f(0f, 1f); glVertex2d(0.0, 0.0)
-            glTexCoord2f(0f, 0f); glVertex2d(0.0, h)
-            glTexCoord2f(1f, 0f); glVertex2d(w, h)
-            glTexCoord2f(1f, 1f); glVertex2d(w, 0.0)
-            glEnd()
         }
     }
 }

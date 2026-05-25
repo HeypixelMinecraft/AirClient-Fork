@@ -37,6 +37,7 @@ object HUD : MinecraftInstance {
         Text::class.java,
         ScoreboardElement::class.java,
         Target::class.java,
+        Target2::class.java,
         OpaiTarget::class.java,
         Target3::class.java,
         Radar::class.java,
