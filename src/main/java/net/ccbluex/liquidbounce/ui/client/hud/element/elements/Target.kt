@@ -252,6 +252,13 @@ class Target : Element("Target"), Listenable {
 
     private var opaiDelayCounter = 0
     private var opaiAnimX = 135F
+    private var opaiAvatarScale = 1f
+    private var opaiAvatarTargetScale = 1f
+    private var opaiAvatarTintAlpha = 0f
+    private var opaiIsHitAnimating = false
+    private var opaiHitAnimTimer = 0f
+    private var opaiPrevHealth = -1f
+    private val opaiHitAnimDuration = 500f
     private var augustusEasingHealth = 0F
 
     private var defaultWidth = 0f
@@ -1473,6 +1480,48 @@ class Target : Element("Target"), Listenable {
             val headY = 3.5f
             val headSize = 30f
             val headRadius = 5f
+            
+            if (opaiPrevHealth < 0f) opaiPrevHealth = entity.health
+            if (entity.health < opaiPrevHealth && !opaiIsHitAnimating) {
+                opaiIsHitAnimating = true
+                opaiHitAnimTimer = 0f
+                opaiAvatarTargetScale = 0.85f
+            }
+            if (opaiIsHitAnimating) {
+                opaiHitAnimTimer += deltaTime
+                val progress = (opaiHitAnimTimer / opaiHitAnimDuration).coerceIn(0f, 1f)
+                when {
+                    progress < 0.4f -> {
+                        opaiAvatarTargetScale = 0.85f
+                        opaiAvatarTintAlpha = lerp(opaiAvatarTintAlpha, 1f, 0.25f)
+                    }
+                    progress < 0.75f -> {
+                        opaiAvatarTargetScale = 1.12f
+                        opaiAvatarTintAlpha = lerp(opaiAvatarTintAlpha, 0.6f, 0.25f)
+                    }
+                    else -> {
+                        opaiAvatarTargetScale = 1f
+                        opaiAvatarTintAlpha = lerp(opaiAvatarTintAlpha, 0f, 0.25f)
+                    }
+                }
+                if (progress >= 1f) {
+                    opaiIsHitAnimating = false
+                    opaiAvatarTargetScale = 1f
+                    opaiAvatarTintAlpha = 0f
+                    opaiHitAnimTimer = 0f
+                }
+            } else {
+                opaiAvatarTargetScale = 1f
+                opaiAvatarTintAlpha = lerp(opaiAvatarTintAlpha, 0f, 0.12f)
+            }
+            opaiAvatarScale = lerp(opaiAvatarScale, opaiAvatarTargetScale, 0.22f)
+            opaiPrevHealth = entity.health
+            
+            GlStateManager.pushMatrix()
+            GlStateManager.translate(headX + headSize / 2f, headY + headSize / 2f, 0f)
+            GlStateManager.scale(opaiAvatarScale, opaiAvatarScale, 1f)
+            GlStateManager.translate(-headX - headSize / 2f, -headY - headSize / 2f, 0f)
+            
             EmbeddedStencil.checkSetupFBO(mc.framebuffer)
             EmbeddedStencil.write(false)
             RenderUtils.drawRoundedRect(headX, headY, headX + headSize, headY + headSize, Color.WHITE.rgb, headRadius)
@@ -1482,6 +1531,13 @@ class Target : Element("Target"), Listenable {
                 8f, 8f, 8, 8, headSize.toInt(), headSize.toInt(), 64f, 64f, Color.WHITE
             )
             EmbeddedStencil.dispose()
+            
+            if (opaiAvatarTintAlpha > 0.01f) {
+                val tint = Color(255, 50, 50, (opaiAvatarTintAlpha * 140).toInt())
+                RenderUtils.drawRoundedRect(headX, headY, headX + headSize, headY + headSize, tint.rgb, headRadius)
+            }
+            
+            GlStateManager.popMatrix()
         }
 
         RenderUtils.drawRoundedBorderRect(3.5f, 3.5f + 30f + 3.5f, resultProgressWidth, 3.5f + 30f + 3.5f + 5f,

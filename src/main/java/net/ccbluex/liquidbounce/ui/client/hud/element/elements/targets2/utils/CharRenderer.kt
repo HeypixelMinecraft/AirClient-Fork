@@ -52,9 +52,9 @@ class CharRenderer(val small: Boolean) : MinecraftInstance() {
         GL11.glEnable(3089)
         RenderUtils.makeScissorBox(
             0F, 
-            orgY + initY - fontHeight * 0.5F, 
+            orgY + initY - fontHeight * 0.1F, 
             scaledRes.scaledWidth.toFloat(), 
-            orgY + cutY + fontHeight * 0.5F
+            orgY + cutY + fontHeight * 0.1F
         )
         for (char in reFormat.toCharArray()) {
             moveX[indexX] = AnimationUtils.animate(animX, moveX[indexX], fontSpeed * 0.025F * delta)

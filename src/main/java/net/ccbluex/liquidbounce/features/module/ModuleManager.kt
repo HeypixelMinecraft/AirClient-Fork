@@ -269,7 +269,6 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             Glint,
             FollowTargetHud,
             MotionBlur,
-            TargetStrafe,
             DrugHallucination,
             Myopia,
             SmartBlink,
@@ -279,6 +278,7 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             BlockBreakFX,
             BlockPlaceFX,
             FireballTrajectory,
+            net.ccbluex.liquidbounce.ui.client.clickgui.opai.OpaiGUI,
         )
 
         registerModules(modules = modules)

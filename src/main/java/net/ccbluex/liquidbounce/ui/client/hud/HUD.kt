@@ -28,6 +28,7 @@ object HUD : MinecraftInstance {
     private val ALL_ELEMENT_CLASSES = arrayOf(
         Armor::class.java,
         Arraylist::class.java,
+        OpaiArrayList::class.java,
         Effects::class.java,
         Image::class.java,
         Inventory::class.java,
@@ -170,6 +171,14 @@ object HUD : MinecraftInstance {
     /** Handle incoming key */
     fun handleKey(c: Char, keyCode: Int) {
         for (element in elements) element.handleKey(c, keyCode)
+    }
+
+    /** Handle damage */
+    fun handleDamage(ent: net.minecraft.entity.player.EntityPlayer) {
+        for (element in elements) {
+            if (element.info.retrieveDamage)
+                element.handleDamage(ent)
+        }
     }
 
     /** Add [element] to HUD */

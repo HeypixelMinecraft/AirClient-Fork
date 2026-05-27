@@ -15,7 +15,7 @@ class Remix(inst: Target2) : TargetStyle("Remix", inst, true) {
     override fun drawTarget(entity: EntityPlayer) {
         updateAnim(entity.health)
         val width = 142F
-        RenderUtils.drawRect(0F, 0F, width, 44F, Color(0, 0, 0, targetInstance.bgAlphaValue).rgb)
+        RenderUtils.drawRect(0F, 0F, width, 44F, Color(0, 0, 0, targetInstance.bgColorValue.alpha).rgb)
         val skinLocation = mc.netHandler.getPlayerInfo(entity.uniqueID)?.locationSkin
         if (skinLocation != null) {
             drawHead(skinLocation, 2, 2, 30, 30)

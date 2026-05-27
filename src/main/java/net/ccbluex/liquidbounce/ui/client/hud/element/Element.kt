@@ -127,6 +127,11 @@ abstract class Element(
      */
     open fun handleKey(c: Char, keyCode: Int) {}
 
+    /**
+     * Called when player takes damage
+     */
+    open fun handleDamage(player: net.minecraft.entity.player.EntityPlayer) {}
+
     companion object {
         const val MAX_GRADIENT_COLORS = 9
     }
@@ -138,7 +143,7 @@ abstract class Element(
  */
 annotation class ElementInfo(
     val name: String, val single: Boolean = false, val force: Boolean = false,
-    val disableScale: Boolean = false, val priority: Int = 0,
+    val disableScale: Boolean = false, val priority: Int = 0, val retrieveDamage: Boolean = false
 )
 
 /**

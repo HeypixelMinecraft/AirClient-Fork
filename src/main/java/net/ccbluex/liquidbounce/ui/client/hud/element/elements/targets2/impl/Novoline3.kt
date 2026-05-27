@@ -5,6 +5,7 @@ import net.ccbluex.liquidbounce.ui.client.hud.element.elements.Target2
 import net.ccbluex.liquidbounce.ui.client.hud.element.elements.targets2.TargetStyle
 import net.ccbluex.liquidbounce.ui.font.Fonts
 import net.ccbluex.liquidbounce.utils.render.RenderUtils
+import net.minecraft.client.renderer.RenderHelper
 import net.minecraft.entity.player.EntityPlayer
 import java.awt.Color
 import kotlin.math.pow
@@ -34,18 +35,19 @@ class Novoline3(inst: Target2) : TargetStyle("Novoline3", inst, true) {
         )
 
         easingHealth += ((entity.health - easingHealth) / 2.0F.pow(10.0F - targetInstance.globalAnimSpeed)) * RenderUtils.deltaTime
-        var x = 22
-        var y = 14
+        
+        RenderHelper.enableGUIStandardItemLighting()
+        var armorX = 40
+        val armorY = 22
         for (index in 3 downTo 0) {
-            RenderUtils.drawRect(
-                x.toFloat() + 15F,
-                y.toFloat(),
-                x.toFloat() + 33f,
-                y + 18f,
-                Color(30, 30, 30, 120).rgb
-            )
-            x += 20
+            val stack = entity.inventory.armorInventory[index]
+            if (stack != null && stack.item != null) {
+                mc.renderItem.renderItemAndEffectIntoGUI(stack, armorX, armorY)
+            }
+            armorX += 18
         }
+        RenderHelper.disableStandardItemLighting()
+        
         val healthName = decimalFormat2.format(easingHealth)
         Fonts.fontSF35.drawString(healthName, easingHealth / entity.maxHealth * (width + 2.5f) + 5, 37F, Color(255, 255, 255, 255).rgb)
     }

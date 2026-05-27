@@ -21,8 +21,9 @@ class Hanabi(inst: Target2) : TargetStyle("Hanabi", inst, true) {
         Fonts.fontSF40.drawString(entity.name, 38.0f, 4.0f, Color.WHITE.rgb)
         val healthStr = decimalFormat.format(entity.health)
         val hurt = Color(255, 0, 0, 255)
-        Fonts.fontSF35.drawStringWithShadow("❤", 112F, 28F, hurt.rgb)
-        Fonts.fontSF35.drawStringWithShadow(healthStr, 120F, 28F, Color.WHITE.rgb)
+        val heartX = 38F
+        Fonts.fontSF35.drawStringWithShadow("❤", heartX, 28F, hurt.rgb)
+        Fonts.fontSF35.drawStringWithShadow(healthStr, heartX + 8F, 28F, Color.WHITE.rgb)
         RenderUtils.drawRoundedRect(38F, 18F, width + 7F, 24F, Color(30, 30, 30).rgb, 3F)
         RenderUtils.drawRoundedRect(38F, 18F, 38F + (easingHealth / entity.maxHealth) * (width - 31F), 24F, targetInstance.barColor.rgb, 3F)
         easingHealth += ((entity.health - easingHealth) / 2.0F.pow(10.0F - targetInstance.globalAnimSpeed)) * RenderUtils.deltaTime

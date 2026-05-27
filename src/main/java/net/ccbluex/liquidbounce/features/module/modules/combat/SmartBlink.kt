@@ -22,15 +22,19 @@ import java.awt.Color
 
 object SmartBlink : Module("SmartBlink", Category.COMBAT) {
 
-    private val startDistance by float("StartDistance", 6f, 1f..20f)
-    private val stopDistance by float("StopDistance", 3f, 1f..20f)
+    private val startDistance by float("StartDistance", 5f, 1f..20f)
+    private val stopDistance by float("StopDistance", 2.5f, 1f..20f)
     
-    private val maxBlinkTime by float("MaxBlinkTime", 5f, 1f..30f)
+    private val maxBlinkTime by float("MaxBlinkTime", 1f, 1f..30f)
     private val cooldownTime by float("CooldownTime", 3f, 1f..10f)
     private val markStopDistance by float("MarkStopDistance", 2f, 0.5f..10f)
     
-    private val pulse by boolean("Pulse", false)
-    private val pulseDelay by int("PulseDelay", 1000, 100..5000) { pulse }
+    //这个pulse很傻逼，我就不用了
+    //private val pulse by boolean("Pulse", false)
+    //private val pulseDelay by int("PulseDelay", 1000, 100..5000) { pulse }
+    
+    private val pulseOnDamage by boolean("PulseOnDamage", true)
+    private val pulseOnHit by boolean("PulseOnHit", true)
     
     private val markPosition by boolean("MarkPosition", true)
     private val markFilled by boolean("MarkFilled", true) { markPosition }
@@ -52,7 +56,7 @@ object SmartBlink : Module("SmartBlink", Category.COMBAT) {
     private val chatNotify by boolean("ChatNotify", true)
     
     private val flagPause by boolean("FlagPause", true)
-    private val flagPauseTime by int("FlagPauseTime", 10, 1..60) { flagPause }
+    private val flagPauseTime by int("FlagPauseTime", 5, 1..60) { flagPause }
     
     private var isBlinking = false
     private var startPosition: AxisAlignedBB? = null
@@ -65,6 +69,7 @@ object SmartBlink : Module("SmartBlink", Category.COMBAT) {
     private var isPausedByFlag = false
     private var isInCooldown = false
     private var cooldownStartTime = 0L
+    private var lastHurtTime = 0
 
     override fun onDisable() {
         if (isBlinking) {
@@ -83,6 +88,19 @@ object SmartBlink : Module("SmartBlink", Category.COMBAT) {
 
     val onUpdate = handler<UpdateEvent> {
         val player = mc.thePlayer ?: return@handler
+        
+        if (pulseOnDamage && isBlinking && player.hurtTime > 0 && lastHurtTime == 0) {
+            BlinkUtils.unblink()
+            isBlinking = false
+            startPosition = null
+            blinkStartTime = 0L
+            isInCooldown = true
+            cooldownStartTime = System.currentTimeMillis()
+            if (chatNotify) {
+                chat("§7[§cSmartBlink§7] §fPulse on damage")
+            }
+        }
+        lastHurtTime = player.hurtTime
         
         if (isPausedByFlag) {
             if (!flagTimer.hasTimePassed(flagPauseTime * 1000L)) {
@@ -191,18 +209,6 @@ object SmartBlink : Module("SmartBlink", Category.COMBAT) {
             cooldownStartTime = System.currentTimeMillis()
             if (chatNotify) {
                 chat("§7[§cSmartBlink§7] §fStopped blinking (reached target)")
-            }
-        }
-        
-        if (pulse && isBlinking && pulseTimer.hasTimePassed(pulseDelay)) {
-            BlinkUtils.unblink()
-            isBlinking = false
-            startPosition = null
-            blinkStartTime = 0L
-            isInCooldown = true
-            cooldownStartTime = System.currentTimeMillis()
-            if (chatNotify) {
-                chat("§7[§cSmartBlink§7] §fPulse release")
             }
         }
     }
@@ -389,6 +395,20 @@ object SmartBlink : Module("SmartBlink", Category.COMBAT) {
                 progressBarTextColor.rgb,
                 true
             )
+        }
+    }
+
+    val onAttack = handler<AttackEvent> {
+        if (!pulseOnHit || !isBlinking) return@handler
+        
+        BlinkUtils.unblink()
+        isBlinking = false
+        startPosition = null
+        blinkStartTime = 0L
+        isInCooldown = true
+        cooldownStartTime = System.currentTimeMillis()
+        if (chatNotify) {
+            chat("§7[§cSmartBlink§7] §fPulse on hit")
         }
     }
 

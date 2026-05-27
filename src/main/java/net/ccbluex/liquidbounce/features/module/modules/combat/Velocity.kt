@@ -51,7 +51,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         "Mode", arrayOf(
             "Simple", "AAC", "AACPush", "AACZero", "AACv4",
             "Reverse", "SmoothReverse", "Jump", "Glitch", "Legit",
-            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce", "MatrixReduce2", "MatrixReduce3",
+            "GhostBlock", "Vulcan", "S32Packet", "MatrixReduce",
             "IntaveReduce", "Intave14", "Intave14.3.3", "IntaveStrong", "AttackReduce",
             "Delay", "GrimC03", "Hypixel", "HypixelAir",
             "Click", "BlocksMC", "Polar", "Buffer", "Prediction"
@@ -110,15 +110,6 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     // MatrixReduce
     private val matrixReduceFactor by float("MatrixReduceFactor", 0.6f, 0.0f..1f) { mode == "MatrixReduce" }
     private val matrixReduceDebug by boolean("MatrixReduceDebug", false) { mode == "MatrixReduce" }
-
-    // MatrixReduce2
-    private val matrixReduce2MovingReduce by float("MatrixReduce2-MovingReduce", 0.0f, 0.0f..1.0f) { mode == "MatrixReduce2" }
-    private val matrixReduce2StaticReduce by float("MatrixReduce2-StaticReduce", 0.2f, 0.0f..1.0f) { mode == "MatrixReduce2" }
-
-    // MatrixReduce3
-    private val matrixReduce3Boost by boolean("MatrixReduce3-Boost", false) { mode == "MatrixReduce3" }
-    private val matrixReduce3BoostFactor by float("MatrixReduce3-BoostFactor", 0.33f, 0.0f..5.0f) { mode == "MatrixReduce3" && matrixReduce3Boost }
-    private val matrixReduce3BoostDelay by int("MatrixReduce3-BoostDelay", 0, 0..2000) { mode == "MatrixReduce3" && matrixReduce3Boost }
 
     // Intave14
     private val intave14TriggerTimes by int("Intave14-TriggerTimes", 2, 1..3) { mode == "Intave14" }
@@ -222,9 +213,6 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private var intave14NotTriggeredA = true
     private var intave14FinalReverseCondition = 0
     private var intave14FinalReverseTriggered = false
-
-    // MatrixReduce3
-    private val matrixReduce3BoostTimer = MSTimer()
 
     // Buffer Mode
     private val bufferedPackets = mutableListOf<BufferedPacket>()
@@ -424,19 +412,6 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     intave14OnGround = mc.thePlayer.onGround
                 }
                 if (mc.thePlayer.hurtTime == 0 && hasReceivedVelocity) {
-                    hasReceivedVelocity = false
-                }
-            }
-
-            "matrixreduce2" -> {
-                if (hasReceivedVelocity && mc.thePlayer.hurtTime >= 9) {
-                    if (mc.thePlayer.isMoving && !(mc.thePlayer.isBlocking || mc.thePlayer.isSneaking || !mc.thePlayer.onGround)) {
-                        mc.thePlayer.motionX *= matrixReduce2MovingReduce
-                        mc.thePlayer.motionZ *= matrixReduce2MovingReduce
-                    } else if (!mc.thePlayer.isMoving || (mc.thePlayer.isBlocking || mc.thePlayer.isSneaking || !mc.thePlayer.onGround)) {
-                        mc.thePlayer.motionX *= matrixReduce2StaticReduce
-                        mc.thePlayer.motionZ *= matrixReduce2StaticReduce
-                    }
                     hasReceivedVelocity = false
                 }
             }
@@ -857,36 +832,6 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
                 "intave14.3.3" -> {
                     hasReceivedVelocity = true
-                }
-
-                "matrixreduce2" -> {
-                    hasReceivedVelocity = true
-                }
-
-                "matrixreduce3" -> {
-                    if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
-                        event.cancelEvent()
-                        if (abs(packet.realMotionY) >= 0.1f) {
-                            mc.thePlayer.motionY = (packet.motionY / 8000f).toDouble()
-
-                            val currentSpeed = sqrt(mc.thePlayer.motionX * mc.thePlayer.motionX + mc.thePlayer.motionZ * mc.thePlayer.motionZ)
-
-                            val knockbackX = packet.getMotionX() / 8000f
-                            val knockbackZ = packet.getMotionZ() / 8000f
-                            val knockbackSpeed = sqrt(knockbackX * knockbackX + knockbackZ * knockbackZ)
-                            if (!mc.thePlayer.isMoving) {
-                                val reducedSpeed = max(knockbackSpeed * 0.1, currentSpeed)
-                                if (knockbackSpeed > 0) {
-                                    mc.thePlayer.motionX = knockbackX / knockbackSpeed * reducedSpeed
-                                    mc.thePlayer.motionZ = knockbackZ / knockbackSpeed * reducedSpeed
-                                }
-                            } else if (matrixReduce3Boost && matrixReduce3BoostTimer.hasTimePassed(matrixReduce3BoostDelay.toLong())) {
-                                mc.thePlayer.motionX *= (matrixReduce3BoostFactor.toDouble() + 1)
-                                mc.thePlayer.motionZ *= (matrixReduce3BoostFactor.toDouble() + 1)
-                                matrixReduce3BoostTimer.reset()
-                            }
-                        }
-                    }
                 }
 
                 "buffer" -> {

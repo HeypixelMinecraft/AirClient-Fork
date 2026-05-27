@@ -19,7 +19,7 @@ class Novoline2(inst: Target2) : TargetStyle("Novoline2", inst, true) {
         targetInstance.counter2[0] += 1
         targetInstance.counter1[0] = targetInstance.counter1[0].coerceIn(0, 50)
         targetInstance.counter2[0] = targetInstance.counter2[0].coerceIn(0, 80)
-        RenderUtils.drawRect(0F, 0F, width, 34.5F, Color(0, 0, 0, targetInstance.bgAlphaValue))
+        RenderUtils.drawRect(0F, 0F, width, 34.5F, Color(0, 0, 0, targetInstance.bgColorValue.alpha))
         val customColor = Color(targetInstance.redValue, targetInstance.greenValue, targetInstance.blueValue, 255)
         RenderUtils.drawGradientSideways(
             34.0, 16.0, width.toDouble() - 2,

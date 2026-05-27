@@ -14,7 +14,6 @@ import net.ccbluex.liquidbounce.ui.client.altmanager.GuiAltManager
 import net.ccbluex.liquidbounce.ui.client.fontmanager.GuiFontManager
 import net.ccbluex.liquidbounce.ui.font.Fonts
 import net.ccbluex.liquidbounce.utils.client.MinecraftInstance
-import net.ccbluex.liquidbounce.utils.client.SplashManager
 import net.ccbluex.liquidbounce.utils.render.RenderUtils
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRect
 import net.ccbluex.liquidbounce.utils.render.animation.Animation
@@ -73,18 +72,6 @@ class CustomMainMenu : AbstractScreen() {
         val sr = ScaledResolution(mc)
         width = sr.scaledWidth
         height = sr.scaledHeight
-        
-        if (SplashManager.update()) {
-            drawDefaultBackground()
-            
-            val alpha = (SplashManager.splashAlpha * 255).toInt()
-            RenderUtils.drawImage(
-                SplashManager.splashResource,
-                0, 0, width, height,
-                Color(255, 255, 255, alpha)
-            )
-            return
-        }
         
         drawDefaultBackground()
         

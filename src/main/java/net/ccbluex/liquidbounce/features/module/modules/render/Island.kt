@@ -70,6 +70,12 @@ object Island : Module("Island", Category.RENDER) {
     private val animTension by float("BounceTension", 0.01f, 0.01f..1.0f)
     private val animFriction by float("BounceFriction", 0.12f, 0.01f..1.0f)
     private val styles = "New Opai"
+    
+    private val logoIcon by choices("LogoIcon", arrayOf("Default", "A", "Diamond", "Radioactive", "Start", "Start2", "Earth"), "A")
+    private val pingIcon by choices("PingIcon", arrayOf("Default", "Ping2", "Ping3", "Ping4", "Ping5"), "Ping3")
+    private val gappleIcon by choices("GappleIcon", arrayOf("Default", "Heart", "Heart2"), "Default")
+    private val userIcon by choices("UserIcon", arrayOf("Default", "User2", "User3", "User4"), "Default")
+    
     private val customip by boolean("customIP", false)
     private val ip by text("IP", "hidden.ip") { customip }
     private val ColorA_ by int("Red", 255, 0..255)
@@ -202,6 +208,49 @@ object Island : Module("Island", Category.RENDER) {
     private fun getSafePing(): Int {
         val player = mc.thePlayer ?: return 0
         return mc.netHandler?.getPlayerInfo(player.uniqueID)?.responseTime ?: 0
+    }
+
+    private fun getLogoResource(): ResourceLocation {
+        return when (logoIcon) {
+            "Default" -> ResourceLocation("airclient/watermark_images/logo_icon.png")
+            "A" -> ResourceLocation("airclient/watermark_images/A.png")
+            "Diamond" -> ResourceLocation("airclient/watermark_images/Diamond.png")
+            "Radioactive" -> ResourceLocation("airclient/watermark_images/Radioactive.png")
+            "Start" -> ResourceLocation("airclient/watermark_images/start.png")
+            "Start2" -> ResourceLocation("airclient/watermark_images/start2.png")
+            "Earth" -> ResourceLocation("airclient/watermark_images/earth.png")
+            else -> ResourceLocation("airclient/watermark_images/logo_icon.png")
+        }
+    }
+
+    private fun getPingResource(): ResourceLocation {
+        return when (pingIcon) {
+            "Default" -> ResourceLocation("airclient/watermark_images/ms.png")
+            "Ping2" -> ResourceLocation("airclient/watermark_images/ping2.png")
+            "Ping3" -> ResourceLocation("airclient/watermark_images/ping3.png")
+            "Ping4" -> ResourceLocation("airclient/watermark_images/ping4.png")
+            "Ping5" -> ResourceLocation("airclient/watermark_images/ping5.png")
+            else -> ResourceLocation("airclient/watermark_images/ms.png")
+        }
+    }
+
+    private fun getGappleResource(): ResourceLocation {
+        return when (gappleIcon) {
+            "Default" -> ResourceLocation("airclient/watermark_images/apple.png")
+            "Heart" -> ResourceLocation("airclient/watermark_images/heart.png")
+            "Heart2" -> ResourceLocation("airclient/watermark_images/heart2.png")
+            else -> ResourceLocation("airclient/watermark_images/apple.png")
+        }
+    }
+
+    private fun getUserResource(): ResourceLocation {
+        return when (userIcon) {
+            "Default" -> ResourceLocation("airclient/watermark_images/user.png")
+            "User2" -> ResourceLocation("airclient/watermark_images/user2.png")
+            "User3" -> ResourceLocation("airclient/watermark_images/user3.png")
+            "User4" -> ResourceLocation("airclient/watermark_images/user4.png")
+            else -> ResourceLocation("airclient/watermark_images/user.png")
+        }
     }
 
     private fun applyBlur(x: Float, y: Float, w: Float, h: Float) {
@@ -667,7 +716,7 @@ object Island : Module("Island", Category.RENDER) {
         
         try {
             val appleImgSize = 24
-            drawImage(ResourceLocation("airclient/watermark_images/apple.png"), 
+            drawImage(getGappleResource(), 
                     (iconBgX + (iconSize - appleImgSize) / 2).toInt(), 
                     (iconBgY + (iconSize - appleImgSize) / 2 + 1).toInt(), 
                     appleImgSize, appleImgSize, Color.WHITE)
@@ -1252,13 +1301,13 @@ object Island : Module("Island", Category.RENDER) {
         var cx = x + info.padding
 
         val colorRGB = Color(ColorA_, ColorB_, ColorC_, 255)
-        drawImage(ResourceLocation("airclient/watermark_images/logo_icon.png"), cx, iconY, 15, 15, colorRGB)
+        drawImage(getLogoResource(), cx, iconY, 15, 15, colorRGB)
         cx += 15F + info.elementSpacing
         Fonts.fontSemibold40.drawString(ClientName, cx, textBaseY, colorRGB.rgb)
         cx += info.clientNameWidth + info.dotSpacing
         drawCenteredDot(cx, textBaseY)
         cx += 4F
-        drawImage(ResourceLocation("airclient/watermark_images/user.png"), cx, iconY, 15, 15, Color.WHITE)
+        drawImage(getUserResource(), cx, iconY, 15, 15, Color.WHITE)
         cx += 15F + info.elementSpacing
         Fonts.fontSemibold40.drawString(info.username, cx - 1F, textBaseY, Color.WHITE.rgb)
         cx += info.usernameWidth + info.dotSpacing
@@ -1355,7 +1404,7 @@ object Island : Module("Island", Category.RENDER) {
         
         drawCenteredDot(cx, textBaseY)
         cx += 4F
-        drawImage(ResourceLocation("airclient/watermark_images/ms.png"), cx, iconY, 15, 15, Color.GREEN)
+        drawImage(getPingResource(), cx, iconY, 15, 15, Color.GREEN)
         cx += 15F + info.elementSpacing
         Fonts.fontSemibold40.drawString(info.pingStr, cx, textBaseY, Color.GREEN.rgb)
         cx += info.pingTextWidth

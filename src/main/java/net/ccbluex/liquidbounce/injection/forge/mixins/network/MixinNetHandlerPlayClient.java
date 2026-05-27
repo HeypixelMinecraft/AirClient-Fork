@@ -7,6 +7,7 @@ package net.ccbluex.liquidbounce.injection.forge.mixins.network;
 import io.netty.buffer.Unpooled;
 import net.ccbluex.liquidbounce.event.EntityMovementEvent;
 import net.ccbluex.liquidbounce.event.EventManager;
+import net.ccbluex.liquidbounce.LiquidBounce;
 import net.ccbluex.liquidbounce.features.module.modules.exploit.AntiExploit;
 import net.ccbluex.liquidbounce.features.module.modules.misc.NoRotateSet;
 import net.ccbluex.liquidbounce.features.module.modules.player.Blink;
@@ -27,6 +28,7 @@ import net.minecraft.client.multiplayer.PlayerControllerMP;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.network.Packet;
 import net.minecraft.network.PacketBuffer;
@@ -254,6 +256,17 @@ public abstract class MixinNetHandlerPlayClient {
 
         if (entity != null)
             EventManager.INSTANCE.call(new EntityMovementEvent(entity));
+    }
+
+    @Inject(method = "handleEntityStatus", at = @At("HEAD"))
+    public void handleDamagePacket(S19PacketEntityStatus packetIn, CallbackInfo callbackInfo) {
+        if (packetIn.getOpCode() == 2) {
+            Entity entity = packetIn.getEntity(clientWorldController);
+            if (entity != null) {
+                if (entity instanceof EntityPlayer)
+                    LiquidBounce.INSTANCE.getHud().handleDamage((EntityPlayer) entity);
+            }
+        }
     }
 
     @Inject(method = "handlePlayerPosLook", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/EntityPlayer;setPositionAndRotation(DDDFF)V", shift = At.Shift.BEFORE))

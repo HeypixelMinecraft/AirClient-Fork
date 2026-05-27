@@ -12,7 +12,7 @@ class Novoline(inst: Target2) : TargetStyle("Novoline", inst, true) {
     override fun drawTarget(entity: EntityPlayer) {
         updateAnim(entity.health)
         val width = (38 + Fonts.fontSF40.getStringWidth(entity.name)).coerceAtLeast(118).toFloat()
-        RenderUtils.drawRect(0f, 0f, width + 14f, 44f, Color(0, 0, 0, targetInstance.bgAlphaValue).rgb)
+        RenderUtils.drawRect(0f, 0f, width + 14f, 44f, Color(0, 0, 0, targetInstance.bgColorValue.alpha).rgb)
         val skinLocation = mc.netHandler.getPlayerInfo(entity.uniqueID)?.locationSkin
         if (skinLocation != null) {
             drawHead(skinLocation, 3, 3, 30, 30)

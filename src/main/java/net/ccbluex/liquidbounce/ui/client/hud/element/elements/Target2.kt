@@ -17,7 +17,7 @@ import net.minecraft.entity.player.EntityPlayer
 import org.lwjgl.opengl.GL11
 import java.awt.Color
 
-@ElementInfo(name = "Target2")
+@ElementInfo(name = "Target2", retrieveDamage = true)
 class Target2 : Element("Target2") {
 
     private val styleList = mutableListOf<TargetStyle>()
@@ -35,12 +35,16 @@ class Target2 : Element("Target2") {
     val shadowColorGreenValue by int("Shadow-Green", 111, 0..255) { shadowValue && shadowColorMode.equals("custom", ignoreCase = true) }
     val shadowColorBlueValue by int("Shadow-Blue", 255, 0..255) { shadowValue && shadowColorMode.equals("custom", ignoreCase = true) }
 
-    val fadeValue by boolean("FadeAnim", false)
-    val fadeSpeed by float("Fade-Speed", 1F, 0F..5F) { fadeValue }
     val noAnimValue by boolean("No-Animation", false)
     val globalAnimSpeed by float("Global-AnimSpeed", 3F, 1F..6.30F) { !noAnimValue }
 
     val showWithChatOpen by boolean("Show-ChatOpen", true)
+
+    val animationType by choices("AnimationType", arrayOf("Scale", "Fade", "Slide", "Bounce", "Zoom", "Elastic", "SlideUp", "SlideDown", "SlideLeft", "SlideRight", "Rotate", "Pulse", "None"), "Scale")
+    val animSpeed by float("AnimationSpeed", 0.1F, 0.01F..0.5F)
+    val bounceTension by float("BounceTension", 0.08f, 0.01f..0.5f) { animationType == "Bounce" }
+    val bounceFriction by float("BounceFriction", 0.2f, 0.01f..0.5f) { animationType == "Bounce" }
+    val slideDistance by float("SlideDistance", 50F, 10F..200F) { animationType in listOf("Slide", "SlideUp", "SlideDown", "SlideLeft", "SlideRight") }
 
     val colorModeValue by choices("Color", arrayOf("Custom", "Rainbow", "Sky", "Slowly", "Fade", "Mixer", "Health"), "Custom")
     val redValue by int("Red", 252, 0..255)
@@ -49,10 +53,7 @@ class Target2 : Element("Target2") {
     val saturationValue by float("Saturation", 1F, 0F..1F)
     val brightnessValue by float("Brightness", 1F, 0F..1F)
     val waveSecondValue by int("Seconds", 2, 1..10)
-    val bgRedValue by int("Background-Red", 0, 0..255)
-    val bgGreenValue by int("Background-Green", 0, 0..255)
-    val bgBlueValue by int("Background-Blue", 0, 0..255)
-    val bgAlphaValue by int("Background-Alpha", 160, 0..255)
+    val bgColorValue by color("Background", Color(0, 0, 0, 160))
 
     val bordercolor: Color
         get() = Color(redValue, greenValue, blueValue)
@@ -64,10 +65,34 @@ class Target2 : Element("Target2") {
     var bgColor = Color(-1)
     var animProgress = 0F
 
+    private var animAlpha = 0F
+    private var animScale = 0F
+    private var animSlideX = 0F
+    private var animSlideY = 0F
+    private var animRotation = 0F
+    
+    private var velAlpha = 0f
+    private var velScale = 0f
+    private var velSlideX = 0f
+    private var velSlideY = 0f
+    private var velRotation = 0f
+    
+    private var lastHasTarget = false
+
     val counter1 = intArrayOf(50)
     val counter2 = intArrayOf(80)
 
     private var mainTarget: EntityPlayer? = null
+
+    private fun spring(current: Float, target: Float, velocity: Float, tension: Float = bounceTension, friction: Float = bounceFriction): Pair<Float, Float> {
+        val displacement = target - current
+        val force = displacement * tension
+        val drag = velocity * friction
+        val acceleration = force - drag
+        val newVelocity = velocity + acceleration
+        val newPosition = current + newVelocity
+        return newPosition to newVelocity
+    }
 
     init {
         val styles = arrayOf(
@@ -99,8 +124,6 @@ class Target2 : Element("Target2") {
         styleList.forEach { addValues(it.values) }
     }
 
-    fun getFadeProgress() = animProgress
-
     override fun drawElement(): Border? {
         val isEditing = mc.currentScreen is GuiHudDesigner
         
@@ -113,20 +136,7 @@ class Target2 : Element("Target2") {
         } else if (mc.currentScreen is GuiChat && showWithChatOpen) {
             mainTarget = mc.thePlayer
         } else {
-            if (fadeValue) {
-                animProgress += (0.0075F * fadeSpeed * RenderUtils.deltaTime)
-                animProgress = animProgress.coerceAtMost(1F)
-                if (animProgress >= 1F) {
-                    mainTarget = null
-                }
-            } else {
-                mainTarget = null
-            }
-        }
-
-        if (mainTarget != null && fadeValue) {
-            animProgress -= (0.0075F * fadeSpeed * RenderUtils.deltaTime)
-            animProgress = animProgress.coerceAtLeast(0F)
+            mainTarget = null
         }
 
         val currentStyleName = styleValue.get()
@@ -149,9 +159,96 @@ class Target2 : Element("Target2") {
         }
 
         barColor = ColorUtils.reAlpha(preBarColor, preBarColor.alpha / 255F * (1F - animProgress))
-        bgColor = Color(bgRedValue, bgGreenValue, bgBlueValue, (bgAlphaValue * (1F - animProgress)).toInt())
+        bgColor = Color(bgColorValue.red, bgColorValue.green, bgColorValue.blue, (bgColorValue.alpha * (1F - animProgress)).toInt())
 
         val returnBorder = mainStyle.getBorder(convertTarget) ?: return Border(0F, 0F, 120F, 48F)
+
+        val hasTarget = mainTarget != null
+        val targetScale = if (hasTarget) 1F else 0F
+        val targetAlpha = if (hasTarget) 1F else 0F
+        
+        if (hasTarget && !lastHasTarget) {
+            animScale = 0F
+            animAlpha = 0F
+            animSlideX = if (animationType == "Slide" || animationType == "SlideRight") -slideDistance else if (animationType == "SlideLeft") slideDistance else 0F
+            animSlideY = if (animationType == "SlideUp") slideDistance else if (animationType == "SlideDown") -slideDistance else 0F
+            animRotation = if (animationType == "Rotate") 360F else 0F
+            velAlpha = 0f
+            velScale = 0f
+        }
+        lastHasTarget = hasTarget
+
+        when (animationType) {
+            "Scale" -> {
+                animScale = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animScale.toDouble(), targetScale.toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = 1F
+            }
+            "Fade" -> {
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "Slide" -> {
+                animSlideX = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animSlideX.toDouble(), (if (hasTarget) 0F else -slideDistance).toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "SlideUp" -> {
+                animSlideY = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animSlideY.toDouble(), (if (hasTarget) 0F else slideDistance).toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "SlideDown" -> {
+                animSlideY = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animSlideY.toDouble(), (if (hasTarget) 0F else -slideDistance).toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "SlideLeft" -> {
+                animSlideX = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animSlideX.toDouble(), (if (hasTarget) 0F else slideDistance).toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "SlideRight" -> {
+                animSlideX = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animSlideX.toDouble(), (if (hasTarget) 0F else -slideDistance).toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "Bounce" -> {
+                val (nextAlpha, vA) = spring(animAlpha, targetAlpha, velAlpha)
+                animAlpha = nextAlpha.coerceIn(0F, 1F)
+                velAlpha = vA
+                
+                val (nextScale, vS) = spring(animScale, targetScale, velScale)
+                animScale = nextScale.coerceIn(0F, 1.5F)
+                velScale = vS
+            }
+            "Zoom" -> {
+                val zoomTarget = if (hasTarget) 1F else 0F
+                animScale = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animScale.toDouble(), zoomTarget.toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = animScale
+            }
+            "Elastic" -> {
+                val elasticTarget = if (hasTarget) 1F else 0F
+                animScale = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animScale.toDouble(), elasticTarget.toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = animScale
+            }
+            "Rotate" -> {
+                animRotation = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animRotation.toDouble(), (if (hasTarget) 0F else 360F).toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
+                animScale = 1F
+            }
+            "Pulse" -> {
+                val pulseTarget = if (hasTarget) 1F else 0F
+                animScale = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animScale.toDouble(), pulseTarget.toDouble(), animSpeed.toDouble()).toFloat()
+                animAlpha = animScale
+            }
+            "None" -> {
+                animScale = 1F
+                animAlpha = 1F
+                animSlideX = 0F
+                animSlideY = 0F
+                animRotation = 0F
+            }
+        }
 
         GL11.glPushMatrix()
         
@@ -199,7 +296,65 @@ class Target2 : Element("Target2") {
                 mainStyle.updateData(renderX.toFloat() + calcTranslateX, renderY.toFloat() + calcTranslateY, calcScaleX, calcScaleY)
             }
 
+            val styleWidth = returnBorder.x2 - returnBorder.x
+            val styleHeight = returnBorder.y2 - returnBorder.y
+            val centerX = returnBorder.x + styleWidth / 2F
+            val centerY = returnBorder.y + styleHeight / 2F
+
+            GlStateManager.pushMatrix()
+            
+            when (animationType) {
+                "Scale" -> {
+                    GlStateManager.translate(centerX, centerY, 0f)
+                    GlStateManager.scale(animScale, animScale, 1f)
+                    GlStateManager.translate(-centerX, -centerY, 0f)
+                }
+                "Slide" -> {
+                    GlStateManager.translate(animSlideX, 0f, 0f)
+                }
+                "SlideUp" -> {
+                    GlStateManager.translate(0f, animSlideY, 0f)
+                }
+                "SlideDown" -> {
+                    GlStateManager.translate(0f, animSlideY, 0f)
+                }
+                "SlideLeft" -> {
+                    GlStateManager.translate(animSlideX, 0f, 0f)
+                }
+                "SlideRight" -> {
+                    GlStateManager.translate(animSlideX, 0f, 0f)
+                }
+                "Bounce" -> {
+                    GlStateManager.translate(centerX, centerY, 0f)
+                    GlStateManager.scale(animScale, animScale, 1f)
+                    GlStateManager.translate(-centerX, -centerY, 0f)
+                }
+                "Zoom" -> {
+                    GlStateManager.translate(centerX, centerY, 0f)
+                    GlStateManager.scale(animScale, animScale, 1f)
+                    GlStateManager.translate(-centerX, -centerY, 0f)
+                }
+                "Elastic" -> {
+                    GlStateManager.translate(centerX, centerY, 0f)
+                    GlStateManager.scale(animScale, animScale, 1f)
+                    GlStateManager.translate(-centerX, -centerY, 0f)
+                }
+                "Rotate" -> {
+                    GlStateManager.translate(centerX, centerY, 0f)
+                    GlStateManager.rotate(animRotation, 0f, 0f, 1f)
+                    GlStateManager.translate(-centerX, -centerY, 0f)
+                }
+                "Pulse" -> {
+                    val pulseScale = animScale + Math.sin(System.currentTimeMillis() / 100.0) * 0.05f
+                    GlStateManager.translate(centerX, centerY, 0f)
+                    GlStateManager.scale(pulseScale.toFloat(), pulseScale.toFloat(), 1f)
+                    GlStateManager.translate(-centerX, -centerY, 0f)
+                }
+            }
+
             mainStyle.drawTarget(convertTarget)
+            
+            GlStateManager.popMatrix()
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
@@ -209,4 +364,14 @@ class Target2 : Element("Target2") {
 
         return returnBorder
     }
+
+    override fun handleDamage(ent: EntityPlayer) {
+        if (mainTarget != null && ent == mainTarget) {
+            val currentStyleName = styleValue.get()
+            val mainStyle = styleList.find { it.name.equals(currentStyleName, ignoreCase = true) }
+            mainStyle?.handleDamage(ent)
+        }
+    }
+
+    fun getFadeProgress() = animProgress
 }

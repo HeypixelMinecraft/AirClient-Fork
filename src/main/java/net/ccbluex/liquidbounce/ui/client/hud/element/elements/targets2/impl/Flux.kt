@@ -19,7 +19,7 @@ class Flux(inst: Target2) : TargetStyle("Flux", inst, true) {
             0f,
             45f + additionalWidth + 6f,
             34f,
-            Color(0, 0, 0, targetInstance.bgAlphaValue).rgb,
+            Color(0, 0, 0, targetInstance.bgColorValue.alpha).rgb,
             5f
         )
         val skinLocation = mc.netHandler.getPlayerInfo(entity.uniqueID)?.locationSkin
