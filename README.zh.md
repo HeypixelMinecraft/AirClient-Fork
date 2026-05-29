@@ -6,7 +6,7 @@ A free open-source mixin-based injection hacked client for Minecraft using Minec
 
 **Version:** b1.0 | **Minecraft:** 1.8.9
 
-[GitHub](https://github.com/lmx0721/AirClient) | [Bilibili](https://space.bilibili.com/3706927473232492) | QQ Group: 722573066 | [English README](README.md)
+[GitHub](https://github.com/lmx0721/AirClient) | [Bilibili](https://space.bilibili.com/3706927473232492) | [QQ群]((https://qm.qq.com/q/okR7w4jqa6)) | [English README](README.md)
 
 </div>
 
@@ -49,12 +49,4 @@ gradlew setupDevWorkspace build
 本项目采用 GNU General Public License v3.0 许可证。
 
 
-<div align="center">
 
-### Links / 链接
-
-[GitHub](https://github.com/lmx0721/AirClient) | [Bilibili](https://space.bilibili.com/3706927473232492) | [QQ群]((https://qm.qq.com/q/okR7w4jqa6))
-
-本项目基于 [LiquidBounce](https://github.com/CCBlueX/LiquidBounce) 开发
-
-</div>
