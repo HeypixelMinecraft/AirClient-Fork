@@ -132,6 +132,12 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val pauseOnExplosion by boolean("PauseOnExplosion", true)
     private val ticksToPause by int("TicksToPause", 20, 1..50) { pauseOnExplosion }
 
+    // Direction Check
+    private val checkDirection by boolean("CheckDirection", false)
+    private val applyOnFront by boolean("ApplyOnFront", true) { checkDirection }
+    private val applyOnSide by boolean("ApplyOnSide", true) { checkDirection }
+    private val applyOnBack by boolean("ApplyOnBack", true) { checkDirection }
+
     // TODO: Could this be useful in other modes? (Jump?)
     // Limits
     private val limitMaxMotionValue = boolean("LimitMaxMotion", false) { mode == "Simple" }
@@ -675,6 +681,43 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         return Math.floorMod(moveYaw.toInt(), 360).toDouble()
     }
 
+    private fun shouldApplyVelocity(packetDirection: Double): Boolean {
+        if (!checkDirection) return true
+
+        val playerDirection = getDirection()
+        val packetDegree = Math.floorMod(packetDirection.toDegrees().toInt(), 360).toDouble()
+
+        val relativeAngle = Math.floorMod((packetDegree - playerDirection).toInt(), 360).toDouble()
+
+        // 击退方向指向后方 = 击退来自前方
+        val isFront = relativeAngle in 135.0..225.0
+        // 击退方向指向前方 = 击退来自后方
+        val isBack = relativeAngle in 315.0..360.0 || relativeAngle in 0.0..45.0
+        // 击退方向指向侧方 = 击退来自侧方
+        val isSide = relativeAngle in 45.0..135.0 || relativeAngle in 225.0..315.0
+
+        return (isFront && applyOnFront) || (isSide && applyOnSide) || (isBack && applyOnBack)
+    }
+
+    private fun getPacketDirection(packet: Packet<*>): Double? {
+        return when (packet) {
+            is S12PacketEntityVelocity -> {
+                if (packet.entityID != mc.thePlayer?.entityId) return null
+                val motionX = packet.motionX.toDouble()
+                val motionZ = packet.motionZ.toDouble()
+                if (motionX == 0.0 && motionZ == 0.0) return null
+                atan2(motionX, motionZ)
+            }
+            is S27PacketExplosion -> {
+                val motionX = mc.thePlayer?.motionX?.plus(packet.field_149152_f) ?: return null
+                val motionZ = mc.thePlayer?.motionZ?.plus(packet.field_149159_h) ?: return null
+                if (motionX == 0.0 && motionZ == 0.0) return null
+                atan2(motionX, motionZ)
+            }
+            else -> null
+        }
+    }
+
     val onPacket = handler<PacketEvent>(priority = 1) { event ->
         val thePlayer = mc.thePlayer ?: return@handler
 
@@ -703,39 +746,18 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                 pauseTicks = ticksToPause
             }
 
+            val packetDirection = getPacketDirection(packet)
+            if (packetDirection != null && !shouldApplyVelocity(packetDirection)) {
+                return@handler
+            }
+
             when (mode.lowercase()) {
                 "simple" -> handleVelocity(event)
 
                 "aac", "reverse", "smoothreverse", "aaczero", "ghostblock", "intavereduce" -> hasReceivedVelocity = true
 
                 "jump" -> {
-                    // TODO: Recode and make all velocity modes support velocity direction checks
-                    var packetDirection = 0.0
-                    when (packet) {
-                        is S12PacketEntityVelocity -> {
-                            if (packet.entityID != thePlayer.entityId) return@handler
-
-                            val motionX = packet.motionX.toDouble()
-                            val motionZ = packet.motionZ.toDouble()
-
-                            packetDirection = atan2(motionX, motionZ)
-                        }
-
-                        is S27PacketExplosion -> {
-                            val motionX = thePlayer.motionX + packet.field_149152_f
-                            val motionZ = thePlayer.motionZ + packet.field_149159_h
-
-                            packetDirection = atan2(motionX, motionZ)
-                        }
-                    }
-                    val degreePlayer = getDirection()
-                    val degreePacket = Math.floorMod(packetDirection.toDegrees().toInt(), 360).toDouble()
-                    var angle = abs(degreePacket + degreePlayer)
-                    val threshold = 120.0
-                    angle = Math.floorMod(angle.toInt(), 360).toDouble()
-                    val inRange = angle in 180 - threshold / 2..180 + threshold / 2
-                    if (inRange)
-                        hasReceivedVelocity = true
+                    hasReceivedVelocity = true
                 }
 
                 "glitch" -> {

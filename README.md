@@ -4,7 +4,7 @@
 
 A free open-source mixin-based injection hacked client for Minecraft using Minecraft Forge.
 
-**Version:** b1.0 | **Minecraft:** 1.8.9
+**Version:** b1.2 | **Minecraft:** 1.8.9
 
 [GitHub](https://github.com/lmx0721/AirClient) | [Bilibili](https://space.bilibili.com/3706927473232492) | QQ Group: 722573066
 
@@ -107,3 +107,27 @@ gradlew setupDevWorkspace build
 本项目基于 [LiquidBounce](https://github.com/CCBlueX/LiquidBounce) 开发
 
 </div>
+
+
+## TODO 计划 / TODO List
+
+### 功能开发 / Features
+- [x] 基础客户端框架搭建 / Basic client framework
+- [x] 200+ 主题颜色系统 / 200+ theme color system
+- [x] 本地音乐播放器功能 / Local music player functionality
+- [x] 灵动岛歌词显示 / Dynamic Island with lyrics
+- [ ] 更多音乐平台支持 / More music platform support
+- [ ] 云配置 / Cloud config
+- [ ] 多语言完整支持 / Full multi-language support
+
+### 模块开发 / Modules
+- [x] Client 分类模块 / Client module categories
+- [ ] augustus样式的click gui / Augustus style click gui
+- [ ] 更多 Combat 模块 / More Combat modules
+- [ ] 更多 Movement 模块 / More Movement modules
+
+### 优化与修复 / Optimization & Fixes
+- [ ] 基础性能优化 / Basic performance optimization
+- [ ] 内存占用优化 / Memory usage optimization
+- [ ] 兼容性修复 / Compatibility fixes
+- [ ] 反检测改进 / Anti-detection improvements

@@ -188,7 +188,7 @@ jar {
 }
 
 mixin {
-    disableRefMapWarning = false
+    disableRefMapWarning = true
     defaultObfuscationEnv searge
     add sourceSets.main, "liquidbounce.mixins.refmap.json"
 }

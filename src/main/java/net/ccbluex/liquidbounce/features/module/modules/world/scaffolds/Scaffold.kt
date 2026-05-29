@@ -14,6 +14,7 @@ import net.ccbluex.liquidbounce.utils.attack.CPSCounter
 import net.ccbluex.liquidbounce.utils.block.*
 import net.ccbluex.liquidbounce.utils.client.PacketUtils.sendPacket
 import net.ccbluex.liquidbounce.utils.extensions.*
+import net.ccbluex.liquidbounce.utils.extras.StuckUtils
 import net.ccbluex.liquidbounce.utils.inventory.InventoryUtils
 import net.ccbluex.liquidbounce.utils.inventory.InventoryUtils.blocksAmount
 import net.ccbluex.liquidbounce.utils.inventory.SilentHotbar
@@ -40,6 +41,7 @@ import net.minecraft.item.ItemBlock
 import net.minecraft.item.ItemStack
 import net.minecraft.network.play.client.C0APacketAnimation
 import net.minecraft.network.play.client.C0BPacketEntityAction
+import net.minecraft.network.play.client.C03PacketPlayer
 import net.minecraft.util.*
 import net.minecraft.world.WorldSettings
 import net.minecraftforge.event.ForgeEventFactory
@@ -196,6 +198,22 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
 
     private val safeWalkValue = boolean("SafeWalk", true) { scaffoldMode != "GodBridge" }
     private val airSafe by boolean("AirSafe", false) { safeWalkValue.isActive() }
+
+    // SelfRescue
+    private val selfRescue by boolean("SelfRescue", false)
+    private val rescueFallDistance by float("RescueFallDistance", 5f, 3f..20f) { selfRescue }
+    private val rescueMode by choices("RescueMode", arrayOf("Stuck", "CancelC03"), "Stuck") { selfRescue }
+    private val rescueMaxDuration by float("RescueMaxDuration", 3f, 0.5f..10f) { selfRescue }
+
+    // SelfRescue state
+    private var isRescuing = false
+    private var rescueStartTime = 0L
+    private var rescueStartX = 0.0
+    private var rescueStartY = 0.0
+    private var rescueStartZ = 0.0
+    private var rescueMotionX = 0.0
+    private var rescueMotionY = 0.0
+    private var rescueMotionZ = 0.0
 
     // Visuals
     private val mark by boolean("Mark", false).subjective()
@@ -433,6 +451,137 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
                 MovementUtils.strafe(0.2F)
                 player.motionY = 0.0
             }
+        }
+
+        // SelfRescue logic
+        if (selfRescue) {
+            updateSelfRescue()
+        }
+    }
+
+    private fun updateSelfRescue() {
+        val player = mc.thePlayer ?: return
+
+        if (isRescuing) {
+            val elapsedSeconds = (System.currentTimeMillis() - rescueStartTime) / 1000.0
+
+            if (elapsedSeconds >= rescueMaxDuration || player.onGround) {
+                stopRescue()
+                return
+            }
+
+            if (rescueMode == "CancelC03") {
+                player.motionX = 0.0
+                player.motionY = 0.0
+                player.motionZ = 0.0
+                player.setPosition(rescueStartX, rescueStartY, rescueStartZ)
+            }
+
+            performRescuePlacement()
+        } else {
+            if (player.fallDistance >= rescueFallDistance && !player.onGround) {
+                startRescue()
+            }
+        }
+    }
+
+    private fun startRescue() {
+        val player = mc.thePlayer ?: return
+
+        isRescuing = true
+        rescueStartTime = System.currentTimeMillis()
+        rescueStartX = player.posX
+        rescueStartY = player.posY
+        rescueStartZ = player.posZ
+        rescueMotionX = player.motionX
+        rescueMotionY = player.motionY
+        rescueMotionZ = player.motionZ
+
+        if (rescueMode == "Stuck") {
+            StuckUtils.stuck()
+        }
+    }
+
+    private fun stopRescue() {
+        val player = mc.thePlayer ?: return
+
+        isRescuing = false
+
+        if (rescueMode == "Stuck") {
+            StuckUtils.stopStuck()
+        } else {
+            player.motionX = rescueMotionX
+            player.motionY = rescueMotionY
+            player.motionZ = rescueMotionZ
+        }
+    }
+
+    private fun performRescuePlacement() {
+        val player = mc.thePlayer ?: return
+        val world = mc.theWorld ?: return
+
+        val nearestBlock = findNearestPlaceableBlock() ?: return
+
+        val rotation = toRotation(nearestBlock.second, false)
+        setTargetRotation(rotation, options, 3)
+
+        val raytrace = performBlockRaytrace(rotation, mc.playerController.blockReachDistance) ?: return
+
+        if (raytrace.typeOfHit.isBlock) {
+            val stack = InventoryUtils.findBlockInHotbar() ?: return
+            val blockStack = player.hotBarSlot(stack).stack ?: return
+
+            if (blockStack.item is ItemBlock) {
+                SilentHotbar.selectSlotSilently(this, stack, render = false, resetManually = true)
+                tryToPlaceBlock(blockStack, raytrace.blockPos, raytrace.sideHit, raytrace.hitVec)
+                SilentHotbar.resetSlot(this, true)
+            }
+        }
+    }
+
+    private fun findNearestPlaceableBlock(): Pair<BlockPos, Vec3>? {
+        val player = mc.thePlayer ?: return null
+        val world = mc.theWorld ?: return null
+
+        val playerPos = BlockPos(player)
+        var nearest: Pair<BlockPos, Vec3>? = null
+        var nearestDistance = Double.MAX_VALUE
+
+        for (yOffset in -3..0) {
+            for (xOffset in -2..2) {
+                for (zOffset in -2..2) {
+                    val checkPos = playerPos.add(xOffset, yOffset, zOffset)
+
+                    if (!checkPos.isReplaceable) continue
+
+                    for (side in EnumFacing.entries) {
+                        val neighbor = checkPos.offset(side)
+                        if (!neighbor.canBeClicked()) continue
+
+                        val hitVec = Vec3(
+                            neighbor.x + 0.5 + side.directionVec.x * 0.5,
+                            neighbor.y + 0.5 + side.directionVec.y * 0.5,
+                            neighbor.z + 0.5 + side.directionVec.z * 0.5
+                        )
+
+                        val distance = player.getDistance(hitVec.xCoord, hitVec.yCoord, hitVec.zCoord)
+                        if (distance < nearestDistance) {
+                            nearestDistance = distance
+                            nearest = Pair(checkPos, hitVec)
+                        }
+                    }
+                }
+            }
+        }
+
+        return nearest
+    }
+
+    val onRescuePacket = handler<PacketEvent> { event ->
+        if (!selfRescue || !isRescuing || rescueMode != "CancelC03") return@handler
+
+        if (event.packet is C03PacketPlayer) {
+            event.cancelEvent()
         }
     }
 
@@ -779,6 +928,10 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
         mc.timer.timerSpeed = 1f
 
         SilentHotbar.resetSlot(this)
+
+        if (isRescuing) {
+            stopRescue()
+        }
 
         options.instant = false
     }

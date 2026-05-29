@@ -133,6 +133,7 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             ForceUnicodeChat,
             FreeCam,
             Freeze,
+            NoC03,
             Fucker,
             Fullbright,
             GameDetector,

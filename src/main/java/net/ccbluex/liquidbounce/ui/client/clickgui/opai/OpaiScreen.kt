@@ -45,8 +45,16 @@ class OpaiScreen : GuiScreen() {
     }
 
     override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
+        updateDrag(mouseX, mouseY)
         MD3Theme.syncFromSettings()
         drawGui(mouseX, mouseY)
+    }
+
+    private fun updateDrag(mouseX: Int, mouseY: Int) {
+        for (panel in panels) {
+            if (!panel.isVisible()) continue
+            panel.mouseDragged(mouseX, mouseY)
+        }
     }
 
     private fun drawGui(mouseX: Int, mouseY: Int) {

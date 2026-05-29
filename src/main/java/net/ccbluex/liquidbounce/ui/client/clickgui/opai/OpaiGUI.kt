@@ -21,7 +21,7 @@ object OpaiGUI : Module("OpaiGUI", Category.CLIENT, Keyboard.KEY_RSHIFT, canBeEn
     val panelWidth by float("PanelWidth", 130f, 80f..200f)
     val panelHeight by float("PanelHeight", 350f, 200f..500f)
     val panelRadius by float("PanelRadius", 12f, 0f..20f)
-    val panelGap by float("PanelGap", 14f, 5f..30f)
+    val panelGap by float("PanelGap", 6f, 2f..30f)
     
     val headerHeight by float("HeaderHeight", 28f, 20f..40f)
     val settingHeight by float("SettingHeight", 22f, 16f..32f)
