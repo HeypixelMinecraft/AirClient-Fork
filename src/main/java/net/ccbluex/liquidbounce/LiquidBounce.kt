@@ -40,6 +40,7 @@ import net.ccbluex.liquidbounce.ui.client.altmanager.GuiAltManager.Companion.loa
 import net.ccbluex.liquidbounce.ui.client.clickgui.ClickGui
 import net.ccbluex.liquidbounce.ui.client.hud.HUD
 import net.ccbluex.liquidbounce.ui.font.Fonts
+import net.ccbluex.liquidbounce.utils.SplashProgress
 import net.ccbluex.liquidbounce.utils.client.BlinkUtils
 import net.ccbluex.liquidbounce.utils.client.ClassUtils.hasForge
 import net.ccbluex.liquidbounce.utils.client.ClientUtils.LOGGER
@@ -171,12 +172,15 @@ object LiquidBounce {
     fun startClient() {
         isStarting = true
 
+        SplashProgress.setProgress(2, "Initializing Minecraft")
         LOGGER.info("Starting $CLIENT_NAME $clientVersionText $clientCommit, by $CLIENT_AUTHOR")
 
         try {
+            SplashProgress.setProgress(2, "Initializing $CLIENT_NAME")
             // Load client fonts
             Fonts.loadFonts()
 
+            SplashProgress.setSecondary("Initializing Listeners")
             // Register listeners
             RotationUtils
             ClientFixes
@@ -202,6 +206,7 @@ object LiquidBounce {
             // Register commands
             registerCommands()
 
+            SplashProgress.setSecondary("Initializing Modules")
             // Setup module manager and register modules
             registerModules()
 
@@ -213,6 +218,8 @@ object LiquidBounce {
                     error("Failed to load SRG mappings.")
                 }
 
+                SplashProgress.setSecondary("Initializing Scripts")
+
                 // ScriptManager
                 loadScripts()
                 enableScripts()
@@ -220,6 +227,7 @@ object LiquidBounce {
                 LOGGER.error("Failed to load scripts.", it)
             }
 
+            SplashProgress.setSecondary("Initializing Configs")
             // Load configs
             loadAllConfigs()
             
@@ -286,6 +294,7 @@ object LiquidBounce {
                 }
             }
 
+            SplashProgress.setSecondary("$CLIENT_NAME loaded!")
             EventManager.call(StartupEvent)
             LOGGER.info("Successfully started client")
         }

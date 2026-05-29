@@ -15,6 +15,7 @@ import net.ccbluex.liquidbounce.file.configs.models.ClientConfiguration;
 import net.ccbluex.liquidbounce.injection.forge.SplashProgressLock;
 import net.ccbluex.liquidbounce.ui.client.GuiMainMenu;
 import net.ccbluex.liquidbounce.ui.client.mainmenu.CustomMainMenu;
+import net.ccbluex.liquidbounce.utils.SplashProgress;
 import net.ccbluex.liquidbounce.utils.attack.CPSCounter;
 import net.ccbluex.liquidbounce.utils.client.ClientUtils;
 import net.ccbluex.liquidbounce.utils.inventory.SilentHotbar;
@@ -309,5 +310,15 @@ public abstract class MixinMinecraft {
     @ModifyConstant(method = "getLimitFramerate", constant = @Constant(intValue = 30))
     public int getLimitFramerate(int constant) {
         return 60;
+    }
+
+    @Inject(method = "startGame", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;checkGLError(Ljava/lang/String;)V", ordinal = 1, shift = At.Shift.AFTER))
+    public void step1(CallbackInfo ci) {
+        SplashProgress.INSTANCE.setProgress(1, "textures");
+    }
+
+    @Inject(method = "startGame", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;checkGLError(Ljava/lang/String;)V", ordinal = 2, shift = At.Shift.AFTER))
+    public void step2(CallbackInfo ci) {
+        SplashProgress.INSTANCE.setProgress(3, "Gui");
     }
 }
