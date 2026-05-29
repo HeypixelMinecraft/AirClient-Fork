@@ -6,7 +6,7 @@ A free open-source mixin-based injection hacked client for Minecraft using Minec
 
 **Version:** b1.0 | **Minecraft:** 1.8.9
 
-[GitHub](https://github.com/lmx0721/AirClient) | [Bilibili](https://space.bilibili.com/3706927473232492) | [QQ Group]((https://qm.qq.com/q/okR7w4jqa6)) | [中文README](README.zh.md)
+[GitHub](https://github.com/lmx0721/AirClient) | [Bilibili](https://space.bilibili.com/3706927473232492) | [QQ Group](https://qm.qq.com/q/okR7w4jqa6) | [中文README](README.zh.md)
 
 </div>
 
