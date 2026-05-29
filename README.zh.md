@@ -2,7 +2,7 @@
 
 # AirClient
 
-A free open-source mixin-based injection hacked client for Minecraft using Minecraft Forge.
+一个使用 Minecraft Forge 的免费开源、基于 mixin 的注入式 Minecraft 客户端。
 
 **Version:** b1.0 | **Minecraft:** 1.8.9
 
