@@ -108,7 +108,7 @@ dependencies {
     implementation "com.googlecode.soundlibs:mp3spi:1.9.5.4"
 
     // jhlabs for image filtering (Gaussian blur)
-    implementation "com.jhlabs:filters:2.0.235"
+    implementation "com.jhlabs:filters:2.0.235-1"
 
     implementation fileTree(include: ["*.jar"], dir: "libs")
 }
