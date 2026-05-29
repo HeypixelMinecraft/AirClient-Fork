@@ -4,7 +4,7 @@ updates:
     directory: "/"
     open-pull-requests-limit: 5
     schedule:
-      interval: "daily"
+      interval: "weekly"
     ignore:
       - dependency-name: "gradle"
 
@@ -12,4 +12,4 @@ updates:
     directory: "/"
     open-pull-requests-limit: 5
     schedule:
-      interval: "daily"
+      interval: "weekly"
