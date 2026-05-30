@@ -7,13 +7,15 @@ package net.ccbluex.liquidbounce.injection.forge.mixins.gui;
 import net.minecraft.client.gui.Gui;
 import net.minecraftforge.fml.client.config.GuiSlider;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Gui.class)
-public class MixinGui {
-    @Shadow public abstract void drawTexturedModalRect(float xCoord, float yCoord, int minU, int minV, int maxU, int maxV);
+public abstract class MixinGui {
+    @Shadow
+    public abstract void drawTexturedModalRect(float xCoord, float yCoord, int minU, int minV, int maxU, int maxV);
 
     @Shadow protected float zLevel;
 
