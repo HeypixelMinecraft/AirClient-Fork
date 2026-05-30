@@ -1789,6 +1789,7 @@ object RenderUtils : MinecraftInstance {
         glPopAttrib()
     }
 
+    @JvmStatic
     fun originalRoundedRect(
         paramXStart: Float, paramYStart: Float, paramXEnd: Float, paramYEnd: Float, radius: Float, color: Int
     ) {
