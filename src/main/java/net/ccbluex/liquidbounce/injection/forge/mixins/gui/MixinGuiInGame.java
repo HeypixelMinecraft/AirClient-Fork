@@ -81,44 +81,43 @@ public abstract class MixinGuiInGame extends MixinGui {
         final RenderUtils render = RenderUtils.INSTANCE;
 
         if (mc.getRenderViewEntity() instanceof EntityPlayer) {
+            final Minecraft mc = Minecraft.getMinecraft();
             EntityPlayer entityPlayer = (EntityPlayer) mc.getRenderViewEntity();
-            float slot = entityPlayer.inventory.currentItem;
 
-            if (hud.handleEvents() && hud.getCustomHotbar()) {
-                boolean blackHB = hud.getCustomHotbar();
-                int middleScreen = sr.getScaledWidth() / 2;
-                float posInv = hud.getAnimPos(slot * 20F);
+            boolean blackHB = hud.getState() && hud.getCustomHotbar();
+            int middleScreen = sr.getScaledWidth() / 2;
+            float posInv = hud.getAnimPos(entityPlayer.inventory.currentItem * 20F);
 
-                GlStateManager.resetColor();
-                GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
-                mc.getTextureManager().bindTexture(widgetsTexPath);
+            GlStateManager.resetColor();
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+            mc.getTextureManager().bindTexture(widgetsTexPath);
 
-                float f = this.zLevel;
-                this.zLevel = -90.0F;
-                GlStateManager.resetColor();
+            float f = this.zLevel;
+            this.zLevel = -90.0F;
+            GlStateManager.resetColor();
 
-                RenderUtils.originalRoundedRect(middleScreen - 91, sr.getScaledHeight() - 2, middleScreen + 91, sr.getScaledHeight() - 22, 3F, Integer.MIN_VALUE);
-                RenderUtils.originalRoundedRect(middleScreen - 91 + posInv, sr.getScaledHeight() - 2, middleScreen - 91 + posInv + 22, sr.getScaledHeight() - 22, 3F, Integer.MAX_VALUE);
+            RenderUtils.originalRoundedRect(middleScreen - 91, sr.getScaledHeight() - 2, middleScreen + 91, sr.getScaledHeight() - 22, 3F, Integer.MIN_VALUE);
+            RenderUtils.originalRoundedRect(middleScreen - 91 + posInv, sr.getScaledHeight() - 2, middleScreen - 91 + posInv + 22, sr.getScaledHeight() - 22, 3F, Integer.MAX_VALUE);
 
-                this.zLevel = f;
-                GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
-                GlStateManager.enableRescaleNormal();
-                GlStateManager.enableBlend();
-                GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-                RenderHelper.enableGUIStandardItemLighting();
+            this.zLevel = f;
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+            GlStateManager.enableRescaleNormal();
+            GlStateManager.enableBlend();
+            GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+            RenderHelper.enableGUIStandardItemLighting();
 
-                for (int j = 0; j < 9; ++j) {
-                    int k = sr.getScaledWidth() / 2 - 90 + j * 20 + 2;
-                    int l = sr.getScaledHeight() - 19 - (blackHB ? 1 : 0);
-                    this.renderHotbarItem(j, k, l, delta, entityPlayer);
-                }
-
-                RenderHelper.disableStandardItemLighting();
-                GlStateManager.disableRescaleNormal();
-                GlStateManager.disableBlend();
-                GlStateManager.resetColor();
-                return;
+            for (int j = 0; j < 9; ++j) {
+                int k = sr.getScaledWidth() / 2 - 90 + j * 20 + 2;
+                int l = sr.getScaledHeight() - 16 - (blackHB ? 4 : 3);
+                this.renderHotbarItem(j, k, l, delta, entityPlayer);
             }
+
+            RenderHelper.disableStandardItemLighting();
+            GlStateManager.disableRescaleNormal();
+            GlStateManager.disableBlend();
+            GlStateManager.translate(0F, RenderUtils.INSTANCE.getYPosOffset(), 0F);
+            ci.cancel();
+            return;
         }
 
         liquidBounce$injectRender2DEvent(delta);
