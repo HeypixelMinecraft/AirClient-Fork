@@ -145,12 +145,12 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     private val onDestroyBlock by boolean("OnDestroyBlock", false)
 
     // AutoBlock
-    val autoBlock by choices("AutoBlock", arrayOf("Off", "Packet", "Fake", "QuickMacro", "BlockOnNoHit"), "Packet")
+    val autoBlock by choices("AutoBlock", arrayOf("Off", "Packet", "Fake", "QuickMacro", "BlockOnNoHit", "HurtTime"), "Packet")
     private val blockMaxRange by float("BlockMaxRange", 3f, 0f..8f) { autoBlock == "Packet" || autoBlock == "QuickMacro" }
     private val unblockMode by choices(
         "UnblockMode", arrayOf("Stop", "Switch", "Empty"), "Stop"
-    ) { autoBlock == "Packet" || autoBlock == "QuickMacro" }
-    private val releaseAutoBlock by boolean("ReleaseAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake", "BlockOnNoHit") }
+    ) { autoBlock == "Packet" || autoBlock == "QuickMacro" || autoBlock == "HurtTime" }
+    private val releaseAutoBlock by boolean("ReleaseAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake", "BlockOnNoHit", "HurtTime") }
     val forceBlockRender by boolean("ForceBlockRender", true) {
         autoBlock !in arrayOf(
             "Off", "Fake"
@@ -158,10 +158,10 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     }
     private val ignoreTickRule by boolean("IgnoreTickRule", false) {
         autoBlock !in arrayOf(
-            "Off", "Fake"
+            "Off", "Fake", "HurtTime"
         ) && releaseAutoBlock
     }
-    private val blockRate by int("BlockRate", 100, 1..100) { autoBlock !in arrayOf("Off", "Fake") && releaseAutoBlock }
+    private val blockRate by int("BlockRate", 100, 1..100) { autoBlock !in arrayOf("Off", "Fake", "HurtTime") && releaseAutoBlock }
 
     private val uncpAutoBlock by boolean("UpdatedNCPAutoBlock", false) {
         autoBlock !in arrayOf(
@@ -171,7 +171,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
 
     private val switchStartBlock by boolean("SwitchStartBlock", false) { autoBlock !in arrayOf("Off", "Fake") }
 
-    private val interactAutoBlock by boolean("InteractAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake") }
+    private val interactAutoBlock by boolean("InteractAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake", "HurtTime") }
 
     val blinkAutoBlock by boolean("BlinkAutoBlock", false) { autoBlock !in arrayOf("Off", "Fake") }
 
@@ -188,6 +188,16 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     private val blockOnNoHitMode by choices("BlockOnNoHitMode", arrayOf("Packet", "RightClick"), "Packet") { autoBlock == "BlockOnNoHit" }
     private val cancelAttackWhenBlocking by boolean("CancelAttackWhenBlocking", true) { autoBlock == "BlockOnNoHit" }
     private val blockOnNoHitDelay by int("BlockOnNoHitDelay", 1, 0..20) { autoBlock == "BlockOnNoHit" }
+    
+    // HurtTime AutoBlock settings
+    private val hurtTimeMode by choices("HurtTimeMode", arrayOf("Custom", "Predict", "Adaptive"), "Custom") { autoBlock == "HurtTime" }
+    private val hurtTimeWaitTicks by int("HurtTimeWaitTicks", 10, 1..100) { autoBlock == "HurtTime" && hurtTimeMode == "Custom" }
+    private val hurtTimeBlockDuration by int("HurtTimeBlockDuration", 3, 1..20) { autoBlock == "HurtTime" }
+    private val hurtTimePredictMultiplier by float("HurtTimePredictMultiplier", 0.8f, 0.5f..1.5f) { autoBlock == "HurtTime" && hurtTimeMode == "Predict" }
+    private val hurtTimeAdaptiveMin by int("HurtTimeAdaptiveMin", 5, 1..50) { autoBlock == "HurtTime" && hurtTimeMode == "Adaptive" }
+    private val hurtTimeAdaptiveMax by int("HurtTimeAdaptiveMax", 20, 1..50) { autoBlock == "HurtTime" && hurtTimeMode == "Adaptive" }
+    private val hurtTimeAdaptiveFactor by float("HurtTimeAdaptiveFactor", 0.7f, 0.1f..1.0f) { autoBlock == "HurtTime" && hurtTimeMode == "Adaptive" }
+    private val hurtTimeCancelAttack by boolean("HurtTimeCancelAttack", true) { autoBlock == "HurtTime" }
 
     // Ignore all blocking conditions, except for block rate, when standing still
     private val forceBlock by boolean("ForceBlockWhenStill", true) { smartAutoBlock }
@@ -400,6 +410,17 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     var blockStatus = false
     private var blockStopInDead = false
     private var blockOnNoHitDelayTick = 0
+    
+    // HurtTime AutoBlock state
+    private var hurtTimeBlocking = false
+    private var hurtTimeBlockStartTick = 0L
+    private var hurtTimeWaitStartTick = 0L
+    private var hurtTimeWaitTicksCalc = 0
+    private var hurtTimeWaitingToBlock = false
+    private var hurtTimeLastHurtTick = 0L
+    private var hurtTimeCurrentTick = 0L
+    private var hurtTimePrevHurtTime = 0
+    private val hurtTimeDamageIntervals = mutableListOf<Long>()
 
     // Switch Delay
     private val switchTimer = MSTimer()
