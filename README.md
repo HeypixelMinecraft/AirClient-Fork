@@ -122,7 +122,7 @@ gradlew setupDevWorkspace build
 
 ### 模块开发 / Modules
 - [x] Client 分类模块 / Client module categories
-- [ ] augustus样式的click gui / Augustus style click gui
+- [x] augustus样式的click gui / Augustus style click gui
 - [ ] 更多 Combat 模块 / More Combat modules
 - [ ] 更多 Movement 模块 / More Movement modules
 
