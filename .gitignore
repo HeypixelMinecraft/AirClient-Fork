@@ -58,3 +58,5 @@ Test.java
 # Build scripts
 build.bat
 build_with_output.bat
+
+bin
