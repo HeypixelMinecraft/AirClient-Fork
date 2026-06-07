@@ -177,7 +177,7 @@ jar {
             "FMLCorePlugin": "net.ccbluex.liquidbounce.injection.forge.MixinLoader",
             "FMLCorePluginContainsFMLMod": true,
             "ForceLoadAsMod": true,
-            "MixinConfigs": "liquidbounce.forge.mixins.json",
+            "MixinConfigs": "liquidbounce.forge.mixins.json,mixins.phosphor.json",
             "ModSide": "CLIENT",
             "TweakClass": "org.spongepowered.asm.launch.MixinTweaker",
             "TweakOrder": "0",

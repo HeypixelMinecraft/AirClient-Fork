@@ -4,6 +4,7 @@
  */
 package net.ccbluex.liquidbounce.features.module.modules.movement
 
+import io.netty.buffer.Unpooled
 import net.ccbluex.liquidbounce.event.*
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
@@ -18,6 +19,7 @@ import net.ccbluex.liquidbounce.utils.timing.MSTimer
 import net.ccbluex.liquidbounce.utils.timing.TickTimer
 import net.minecraft.item.*
 import net.minecraft.network.Packet
+import net.minecraft.network.PacketBuffer
 import net.minecraft.network.handshake.client.C00Handshake
 import net.minecraft.network.play.client.*
 import net.minecraft.network.play.client.C07PacketPlayerDigging.Action.DROP_ITEM
@@ -35,11 +37,16 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val swordMode by choices(
         "SwordMode",
-        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "postplace", "Matrix"),
+        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "postplace", "Matrix", "PredictionSemi", "Prediction"),
         "None"
     )
 
     private val reblinkTicks by int("ReblinkTicks", 10, 1..20) { swordMode == "Blink" }
+    private val predictionCancelTick by int("PredictionSemiCancelTick", 1, 0..2) { swordMode == "PredictionSemi" }
+    private val predictionCancelTick2 by int("PredictionSemiCancelTick2", 1, 0..2) { swordMode == "PredictionSemi" }
+    private val predictionSwapDelay by int("PredictionSwapDelay", 0, 0..3) { swordMode == "Prediction" }
+    private val predictionBlink by boolean("PredictionBlink", false) { swordMode == "Prediction" }
+    private val predictionC17 by boolean("PredictionC17", false) { swordMode == "Prediction" }
 
     private val blockForwardMultiplier by float("BlockForwardMultiplier", 1f, 0.2F..1f)
     private val blockStrafeMultiplier by float("BlockStrafeMultiplier", 1f, 0.2F..1f)
@@ -79,6 +86,9 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
     private var shouldNoSlow = false
 
     private var hasDropped = false
+    private var predictionDelay = 0
+    private var predictionPost = false
+    private var predictionBlockTick = 0
 
     // Matrix模式相关变量
     private var nextTemp = false
@@ -94,6 +104,10 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
         shouldBlink = true
         BlinkTimer.reset()
         BlinkUtils.unblink()
+        hasDropped = false
+        predictionDelay = 0
+        predictionPost = false
+        predictionBlockTick = 0
 
         // 重置Matrix模式相关变量
         nextTemp = false
@@ -210,6 +224,10 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
         }
 
         if (heldItem.item is ItemSword && isUsingItem) {
+            if (event.eventState == EventState.PRE) {
+                updatePredictionState()
+            }
+
             when (swordMode.lowercase()) {
                 "ncp" ->
                     when (event.eventState) {
@@ -259,8 +277,26 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
                         sendPacket(C08PacketPlayerBlockPlacement(BlockPos(-1, -1, -1), 255, heldItem, 0f, 0f, 0f))
                     }
 
-                "Matrix" -> {
-                    // Matrix模式已在上面处理
+                "predictionsemi" -> {
+                }
+
+                "prediction" -> {
+                    if (event.eventState == EventState.PRE) {
+                        predictionDelay--
+
+                        if (predictionDelay < 0) {
+                            sendPredictionSwap()
+                            predictionPost = true
+                            predictionDelay = predictionSwapDelay
+                        }
+                    } else if (predictionPost) {
+                        if (predictionBlink) {
+                            sendPacket(C08PacketPlayerBlockPlacement(heldItem))
+                            BlinkUtils.unblink()
+                        }
+
+                        predictionPost = false
+                    }
                 }
             }
         }
@@ -272,6 +308,11 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
         if (event.isCancelled || shouldSwap)
             return@handler
+
+        if (swordMode == "Prediction" && predictionBlink && predictionPost && packet is C03PacketPlayer) {
+            BlinkUtils.blink(packet, event, sent = true, receive = false)
+            return@handler
+        }
 
         // Matrix模式包处理
         if (swordMode == "Matrix" && nextTemp) {
@@ -393,6 +434,9 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
                 return@handler
         }
 
+        if (heldItem is ItemSword && swordMode == "PredictionSemi" && predictionBlockTick != predictionCancelTick && predictionBlockTick != predictionCancelTick2)
+            return@handler
+
         event.forward = getMultiplier(heldItem, true)
         event.strafe = getMultiplier(heldItem, false)
     }
@@ -412,6 +456,28 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     fun usingItemFunc() =
         mc.thePlayer?.heldItem != null && (mc.thePlayer.isUsingItem || (mc.thePlayer.heldItem?.item is ItemSword && KillAura.blockStatus) || isUNCPBlocking())
+
+    private fun updatePredictionState() {
+        if (swordMode == "PredictionSemi") {
+            predictionBlockTick = (predictionBlockTick + 1) % 3
+        } else if (swordMode != "Prediction") {
+            predictionBlockTick = 0
+        }
+    }
+
+    private fun sendPredictionSwap() {
+        val player = mc.thePlayer ?: return
+        val currentSlot = player.inventory.currentItem
+        val swapSlot = (currentSlot + 1) % 9
+
+        sendPacket(C09PacketHeldItemChange(swapSlot))
+
+        if (predictionC17) {
+            sendPacket(C17PacketCustomPayload("woshijiejue", PacketBuffer(Unpooled.buffer())))
+        }
+
+        sendPacket(C09PacketHeldItemChange(currentSlot))
+    }
 
     private fun updateSlot() {
         SilentHotbar.selectSlotSilently(this, (SilentHotbar.currentSlot + 1) % 9, immediate = true)
