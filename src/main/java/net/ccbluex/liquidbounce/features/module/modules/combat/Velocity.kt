@@ -20,15 +20,21 @@ import net.ccbluex.liquidbounce.utils.kotlin.RandomUtils.nextInt
 import net.ccbluex.liquidbounce.utils.movement.MovementUtils.isOnGround
 import net.ccbluex.liquidbounce.utils.movement.MovementUtils.speed
 import net.ccbluex.liquidbounce.utils.rotation.RaycastUtils.runWithModifiedRaycastResult
+import net.ccbluex.liquidbounce.utils.rotation.Rotation
+import net.ccbluex.liquidbounce.utils.rotation.RotationSettings
 import net.ccbluex.liquidbounce.utils.rotation.RotationUtils.currentRotation
+import net.ccbluex.liquidbounce.utils.rotation.RotationUtils.setTargetRotation
 import net.ccbluex.liquidbounce.utils.timing.MSTimer
 import net.minecraft.block.BlockAir
+import net.minecraft.client.entity.EntityPlayerSP
 import net.minecraft.entity.Entity
+import net.minecraft.entity.EntityLivingBase
 import net.minecraft.network.Packet
 import net.minecraft.network.play.client.*
 import net.minecraft.network.play.client.C07PacketPlayerDigging.Action.STOP_DESTROY_BLOCK
 import net.minecraft.network.play.client.C0BPacketEntityAction.Action.*
 import net.minecraft.network.play.server.S12PacketEntityVelocity
+import net.minecraft.network.play.server.S19PacketEntityStatus
 import net.minecraft.network.play.server.S27PacketExplosion
 import net.minecraft.network.play.server.S32PacketConfirmTransaction
 import net.minecraft.util.AxisAlignedBB
@@ -39,8 +45,11 @@ import kotlin.collections.component2
 import kotlin.collections.set
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.PI
 
 object Velocity : Module("Velocity", Category.COMBAT) {
 
@@ -161,6 +170,19 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
     // Prediction
     private val predictionClicks by intRange("PredictionClicks", 1..2, 1..20) { mode == "Prediction" }
+    private val predictionJump by boolean("PredictionJump", true) { mode == "Prediction" }
+    private val predictionDelay by boolean("PredictionDelay", false) { mode == "Prediction" }
+    private val predictionDelayTicks by int("PredictionDelayTicks", 2, 0..10) { mode == "Prediction" && predictionDelay }
+    private val predictionGroundDelay by boolean("PredictionGroundDelay", false) { mode == "Prediction" && predictionDelay }
+    private val predictionAirBuffer by boolean("PredictionAirBuffer", false) { mode == "Prediction" && predictionDelay }
+    private val predictionRotate by boolean("PredictionRotate", false) { mode == "Prediction" }
+    private val predictionRotateTicks by int("PredictionRotateTicks", 2, 1..10) { mode == "Prediction" && predictionRotate }
+    private val predictionAutoMove by boolean("PredictionAutoMove", false) { mode == "Prediction" && predictionRotate }
+    private val predictionReduce by boolean("PredictionReduce", false) { mode == "Prediction" }
+    private val predictionOnlySprinting by boolean("PredictionOnlySprinting", true) { mode == "Prediction" && predictionReduce }
+    private val predictionReduceWhenCanAttack by boolean("PredictionReduceWhenCanAttack", false) { mode == "Prediction" && predictionReduce }
+    private val predictionAttackTimes by int("PredictionAttackTimes", 1, 1..5) { mode == "Prediction" && predictionReduce }
+    private val predictionRotationSettings = RotationSettings(this) { mode == "Prediction" && predictionRotate }.withoutKeepRotation()
 
     // Buffer Mode
     private val bufferDelay by int("BufferDelay", 3, 1..10) { mode == "Buffer" }
@@ -220,6 +242,21 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private var intave14FinalReverseCondition = 0
     private var intave14FinalReverseTriggered = false
 
+    // Prediction
+    private var predictionRotateTickCounter = 0
+    private var predictionKnockbackX = 0.0
+    private var predictionKnockbackZ = 0.0
+    private var predictionTargetRotation: Rotation? = null
+    private var predictionDelayFlag = false
+    private var predictionTicksSinceVelocity = -1
+    private var predictionHandleReset = false
+    private var predictionReduceTick = 0
+    private var predictionAllowNext = true
+    private var predictionPendingExplosion = false
+    private var predictionIsFallDamage = false
+    private var predictionDelayedPacket: Packet<*>? = null
+    private var predictionDelayedTicks = 0
+
     // Buffer Mode
     private val bufferedPackets = mutableListOf<BufferedPacket>()
 
@@ -239,265 +276,12 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         reset()
     }
 
-    val onUpdate = handler<UpdateEvent> {
+    val onClick = handler<GameTickEvent> {
         val thePlayer = mc.thePlayer ?: return@handler
 
-        if (thePlayer.isInLiquid || thePlayer.isInWeb || thePlayer.isDead)
-            return@handler
-
-        when (mode.lowercase()) {
-            "glitch" -> {
-                thePlayer.noClip = hasReceivedVelocity
-
-                if (thePlayer.hurtTime == 7)
-                    thePlayer.motionY = 0.4
-
-                hasReceivedVelocity = false
-            }
-
-            "reverse" -> {
-                val nearbyEntity = getNearestEntityInRange()
-
-                if (!hasReceivedVelocity)
-                    return@handler
-
-                if (nearbyEntity != null) {
-                    if (!thePlayer.onGround) {
-                        if (onLook && !isLookingOnEntities(nearbyEntity, maxAngleDifference.toDouble())) {
-                            return@handler
-                        }
-
-                        speed *= reverseStrength
-                    } else if (velocityTimer.hasTimePassed(80))
-                        hasReceivedVelocity = false
-                }
-            }
-
-            "smoothreverse" -> {
-                val nearbyEntity = getNearestEntityInRange()
-
-                if (hasReceivedVelocity) {
-                    if (nearbyEntity == null) {
-                        thePlayer.speedInAir = 0.02F
-                        reverseHurt = false
-                    } else {
-                        if (onLook && !isLookingOnEntities(nearbyEntity, maxAngleDifference.toDouble())) {
-                            hasReceivedVelocity = false
-                            thePlayer.speedInAir = 0.02F
-                            reverseHurt = false
-                        } else {
-                            if (thePlayer.hurtTime > 0) {
-                                reverseHurt = true
-                            }
-
-                            if (!thePlayer.onGround) {
-                                thePlayer.speedInAir = if (reverseHurt) reverse2Strength else 0.02F
-                            } else if (velocityTimer.hasTimePassed(80)) {
-                                hasReceivedVelocity = false
-                                thePlayer.speedInAir = 0.02F
-                                reverseHurt = false
-                            }
-                        }
-                    }
-                }
-            }
-
-            "aac" -> if (hasReceivedVelocity && velocityTimer.hasTimePassed(80)) {
-                thePlayer.motionX *= horizontal
-                thePlayer.motionZ *= horizontal
-                //mc.thePlayer.motionY *= vertical ?
-                hasReceivedVelocity = false
-            }
-
-            "aacv4" ->
-                if (thePlayer.hurtTime > 0 && !thePlayer.onGround) {
-                    val reduce = aacv4MotionReducer
-                    thePlayer.motionX *= reduce
-                    thePlayer.motionZ *= reduce
-                }
-
-            "aacpush" -> {
-                if (jump) {
-                    if (thePlayer.onGround)
-                        jump = false
-                } else {
-                    // Strafe
-                    if (thePlayer.hurtTime > 0 && thePlayer.motionX != 0.0 && thePlayer.motionZ != 0.0)
-                        thePlayer.onGround = true
-
-                    // Reduce Y
-                    if (thePlayer.hurtResistantTime > 0 && aacPushYReducer && !Speed.handleEvents())
-                        thePlayer.motionY -= 0.014999993
-                }
-
-                // Reduce XZ
-                if (thePlayer.hurtResistantTime >= 19) {
-                    val reduce = aacPushXZReducer
-
-                    thePlayer.motionX /= reduce
-                    thePlayer.motionZ /= reduce
-                }
-            }
-
-            "aaczero" ->
-                if (thePlayer.hurtTime > 0) {
-                    if (!hasReceivedVelocity || thePlayer.onGround || thePlayer.fallDistance > 2F)
-                        return@handler
-
-                    thePlayer.motionY -= 1.0
-                    thePlayer.isAirBorne = true
-                    thePlayer.onGround = true
-                } else
-                    hasReceivedVelocity = false
-
-            "legit" -> {
-                if (legitDisableInAir && !isOnGround(0.5))
-                    return@handler
-
-                if (mc.thePlayer.maxHurtResistantTime != mc.thePlayer.hurtResistantTime || mc.thePlayer.maxHurtResistantTime == 0)
-                    return@handler
-
-                if (nextInt(endExclusive = 100) < chance) {
-                    val horizontal = horizontal / 100f
-                    val vertical = vertical / 100f
-
-                    thePlayer.motionX *= horizontal.toDouble()
-                    thePlayer.motionZ *= horizontal.toDouble()
-                    thePlayer.motionY *= vertical.toDouble()
-                }
-            }
-
-            "intavereduce" -> {
-                if (!hasReceivedVelocity) return@handler
-                intaveTick++
-
-                if (mc.thePlayer.hurtTime == 2) {
-                    intaveDamageTick++
-                    if (thePlayer.onGround && intaveTick % 2 == 0 && intaveDamageTick <= 10) {
-                        thePlayer.tryJump()
-                        intaveTick = 0
-                    }
-                    hasReceivedVelocity = false
-                }
-            }
-
-            "hypixel" -> {
-                if (hasReceivedVelocity && thePlayer.onGround) {
-                    absorbedVelocity = false
-                }
-            }
-
-            "hypixelair" -> {
-                if (hasReceivedVelocity) {
-                    if (thePlayer.onGround) {
-                        thePlayer.tryJump()
-                    }
-                    hasReceivedVelocity = false
-                }
-            }
-
-            "prediction" -> {
-                if (hasReceivedVelocity) {
-                    if (!thePlayer.isJumping && thePlayer.isSprinting && thePlayer.onGround && thePlayer.hurtTime == 9) {
-                        thePlayer.tryJump()
-                        limitUntilJump = 0
-                    }
-                    hasReceivedVelocity = false
-                }
-            }
-
-            "polar" -> {
-                if (thePlayer.hurtTime == polarHurtTime) {
-                    thePlayer.tryJump()
-                    polarHurtTime = kotlin.random.Random.nextInt(8, 10)
-                }
-            }
-
-            "intave14" -> {
-                if (mc.thePlayer.hurtTime >= 9 && hasReceivedVelocity) {
-                    intave14OnGround = mc.thePlayer.onGround
-                }
-                if (mc.thePlayer.hurtTime == 0 && hasReceivedVelocity) {
-                    hasReceivedVelocity = false
-                }
-            }
-        }
-    }
-
-    /**
-     * @see net.minecraft.entity.player.EntityPlayer.attackTargetEntityWithCurrentItem
-     * Lines 1035 and 1058
-     *
-     * Minecraft only applies motion slow-down when you are sprinting and attacking, once per tick.
-     * An example scenario: If you perform a mouse double-click on an entity, the game will only accept the first attack.
-     *
-     * This is where we come in clutch by making the player always sprint before dropping
-     *
-     * [clicks] amount of hits on the target [entity]
-     *
-     * We also explicitly-cast the player as an [Entity] to avoid triggering any other things caused from setting new sprint status.
-     *
-     * @see net.minecraft.client.entity.EntityPlayerSP.setSprinting
-     * @see net.minecraft.entity.EntityLivingBase.setSprinting
-     */
-    val onGameTick = handler<GameTickEvent> {
-        val thePlayer = mc.thePlayer ?: return@handler
-
-        // Buffer Mode - Process buffered packets
-        if (mode == "Buffer") {
-            val iterator = bufferedPackets.iterator()
-            while (iterator.hasNext()) {
-                val bufferedPacket = iterator.next()
-                bufferedPacket.remainingTicks--
-
-                if (bufferedPacket.remainingTicks <= 0) {
-                    when (bufferedPacket.packet) {
-                        is S12PacketEntityVelocity -> {
-                            val packet = bufferedPacket.packet
-                            thePlayer.motionX = packet.motionX / 8000.0
-                            thePlayer.motionY = packet.motionY / 8000.0
-                            thePlayer.motionZ = packet.motionZ / 8000.0
-                        }
-                        is S27PacketExplosion -> {
-                            val packet = bufferedPacket.packet
-                            thePlayer.motionX += packet.field_149152_f.toDouble()
-                            thePlayer.motionY += packet.field_149153_g.toDouble()
-                            thePlayer.motionZ += packet.field_149159_h.toDouble()
-                        }
-                    }
-                    iterator.remove()
-                }
-            }
-        }
-
-        mc.theWorld ?: return@handler
-
-        // Prediction模式：Click模式部分
         if (mode == "Prediction") {
-            if (thePlayer.hurtTime != 10 || thePlayer.isBlocking || KillAura.blockStatus)
-                return@handler
-
-            var target: Entity? = mc.objectMouseOver?.entityHit
-
-            if (target == null) {
-                runWithModifiedRaycastResult(
-                    currentRotation ?: thePlayer.rotation,
-                    3.0,
-                    0.0
-                ) {
-                    target = it.entityHit?.takeIf { isSelected(it, true) }
-                }
-            }
-
-            val finalTarget = target ?: return@handler
-
-            val swingHand = {
-                thePlayer.swingItem()
-            }
-
-            repeat(predictionClicks.random()) {
-                thePlayer.attackEntityWithModifiedSprint(finalTarget, true) { swingHand() }
-            }
+            handlePredictionDelayedPacket(thePlayer)
+            handlePredictionReduce(thePlayer)
             return@handler
         }
 
@@ -689,11 +473,11 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
         val relativeAngle = Math.floorMod((packetDegree - playerDirection).toInt(), 360).toDouble()
 
-        // 击退方向指向后方 = 击退来自前方
+        // 鍑婚€€鏂瑰悜鎸囧悜鍚庢柟 = 鍑婚€€鏉ヨ嚜鍓嶆柟
         val isFront = relativeAngle in 135.0..225.0
-        // 击退方向指向前方 = 击退来自后方
+        // 鍑婚€€鏂瑰悜鎸囧悜鍓嶆柟 = 鍑婚€€鏉ヨ嚜鍚庢柟
         val isBack = relativeAngle in 315.0..360.0 || relativeAngle in 0.0..45.0
-        // 击退方向指向侧方 = 击退来自侧方
+        // 鍑婚€€鏂瑰悜鎸囧悜渚ф柟 = 鍑婚€€鏉ヨ嚜渚ф柟
         val isSide = relativeAngle in 45.0..135.0 || relativeAngle in 225.0..315.0
 
         return (isFront && applyOnFront) || (isSide && applyOnSide) || (isBack && applyOnBack)
@@ -780,7 +564,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                         }
 
                         if (matrixReduceDebug) {
-                            chat("§7[MatrixReduce] §fApplied factor: §a${(factor * 100).toInt()}%")
+                            chat("搂7[MatrixReduce] 搂fApplied factor: 搂a${(factor * 100).toInt()}%")
                         }
                     }
                 }
@@ -834,9 +618,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     event.cancelEvent()
                 }
 
-                "prediction" -> {
-                    hasReceivedVelocity = true
-                }
+                "prediction" -> handlePredictionVelocityPacket(event, packet, thePlayer)
 
                 "polar" -> {
                     hasReceivedVelocity = true
@@ -1013,7 +795,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         }
     }
 
-    val onStrafe = handler<StrafeEvent> {
+    val onStrafe = handler<StrafeEvent> { event ->
         val player = mc.thePlayer ?: return@handler
 
         if (mode == "Jump" && hasReceivedVelocity) {
@@ -1022,6 +804,21 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                 limitUntilJump = 0
             }
             hasReceivedVelocity = false
+            return@handler
+        }
+
+        if (mode == "Prediction" && predictionRotate && predictionRotateTickCounter > 0) {
+            predictionTargetRotation?.let { rotation ->
+                event.cancelEvent()
+
+                if (predictionAutoMove) {
+                    val yawRad = rotation.yaw / 180.0 * PI
+                    player.motionX += -sin(yawRad) * event.friction
+                    player.motionZ += cos(yawRad) * event.friction
+                } else {
+                    rotation.applyStrafeToPlayer(event)
+                }
+            }
             return@handler
         }
 
@@ -1059,6 +856,168 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         "ticks" -> limitUntilJump >= ticksUntilJump
         "receivedhits" -> limitUntilJump >= hitsUntilJump
         else -> false
+    }
+
+    private fun resetPrediction() {
+        predictionRotateTickCounter = 0
+        predictionKnockbackX = 0.0
+        predictionKnockbackZ = 0.0
+        predictionTargetRotation = null
+        predictionDelayFlag = false
+        predictionTicksSinceVelocity = -1
+        predictionHandleReset = false
+        predictionReduceTick = 0
+        predictionAllowNext = true
+        predictionPendingExplosion = false
+        predictionIsFallDamage = false
+        predictionDelayedPacket = null
+        predictionDelayedTicks = 0
+    }
+
+    private fun handlePredictionTick(player: EntityPlayerSP) {
+        if (predictionTicksSinceVelocity >= 0) {
+            if (predictionTicksSinceVelocity < 10) {
+                predictionTicksSinceVelocity++
+            } else {
+                predictionTicksSinceVelocity = -1
+            }
+        }
+
+        if (predictionRotateTickCounter > 0) {
+            predictionTargetRotation?.let { setTargetRotation(it, predictionRotationSettings, predictionRotateTicks) }
+            predictionRotateTickCounter--
+        } else {
+            predictionTargetRotation = null
+        }
+
+        if (predictionJump && predictionHandleReset) {
+            if (!player.isJumping && player.isSprinting && player.onGround && player.hurtTime >= 8) {
+                player.tryJump()
+                limitUntilJump = 0
+                predictionHandleReset = false
+            } else if (player.hurtTime == 0 && predictionTicksSinceVelocity > 2) {
+                predictionHandleReset = false
+            }
+        }
+    }
+
+    private fun handlePredictionDelayedPacket(player: EntityPlayerSP) {
+        val packet = predictionDelayedPacket ?: return
+
+        predictionDelayedTicks++
+
+        val shouldRelease = if (predictionAirBuffer) {
+            player.onGround && predictionDelayedTicks > 0
+        } else {
+            predictionDelayedTicks >= predictionDelayTicks && (!predictionGroundDelay || player.onGround)
+        }
+
+        if (shouldRelease) {
+            applyPredictionPacket(packet, player)
+            predictionDelayedPacket = null
+            predictionDelayedTicks = 0
+            predictionDelayFlag = false
+        }
+    }
+
+    private fun handlePredictionReduce(player: EntityPlayerSP) {
+        if (!predictionReduce || predictionReduceTick <= 0 || player.hurtTime <= 0 || player.isBlocking || KillAura.blockStatus)
+            return
+
+        if (predictionOnlySprinting && !player.isSprinting)
+            return
+
+        val target = findPredictionTarget() ?: return
+
+        if (predictionReduceWhenCanAttack && player.hurtResistantTime <= 0)
+            return
+
+        repeat(predictionAttackTimes) {
+            player.attackEntityWithModifiedSprint(target, true) { player.swingItem() }
+        }
+
+        player.motionX *= 0.6
+        player.motionZ *= 0.6
+        player.isSprinting = false
+        predictionReduceTick--
+    }
+
+    private fun findPredictionTarget(): Entity? {
+        mc.objectMouseOver?.entityHit?.takeIf { isSelected(it, true) }?.let { return it }
+
+        var target: Entity? = KillAura.target?.takeIf { isSelected(it, true) }
+
+        if (target == null) {
+            runWithModifiedRaycastResult(
+                currentRotation ?: mc.thePlayer.rotation,
+                3.0,
+                0.0
+            ) {
+                target = it.entityHit?.takeIf { entity -> isSelected(entity, true) }
+            }
+        }
+
+        return target
+    }
+
+    private fun handlePredictionVelocityPacket(event: PacketEvent, packet: Packet<*>, player: EntityPlayerSP) {
+        hasReceivedVelocity = true
+        predictionTicksSinceVelocity = 0
+        predictionHandleReset = true
+        predictionAllowNext = false
+        predictionPendingExplosion = packet is S27PacketExplosion
+        predictionIsFallDamage = player.fallDistance > 0F
+        predictionReduceTick = if (predictionReduce) predictionAttackTimes else 0
+        setupPredictionRotation(packet, player)
+
+        if (predictionDelay) {
+            event.cancelEvent()
+            predictionDelayedPacket = packet
+            predictionDelayedTicks = 0
+            predictionDelayFlag = true
+            return
+        }
+    }
+
+    private fun setupPredictionRotation(packet: Packet<*>, player: EntityPlayerSP) {
+        if (!predictionRotate)
+            return
+
+        val motion = when (packet) {
+            is S12PacketEntityVelocity -> {
+                if (packet.entityID != player.entityId) return
+                packet.motionX / 8000.0 to packet.motionZ / 8000.0
+            }
+            is S27PacketExplosion -> packet.field_149152_f.toDouble() to packet.field_149159_h.toDouble()
+            else -> return
+        }
+
+        predictionKnockbackX = motion.first
+        predictionKnockbackZ = motion.second
+
+        if (predictionKnockbackX == 0.0 && predictionKnockbackZ == 0.0)
+            return
+
+        val yaw = (atan2(predictionKnockbackZ, predictionKnockbackX) * 180.0 / PI - 90.0).toFloat()
+        predictionTargetRotation = Rotation(yaw, player.rotationPitch)
+        predictionRotateTickCounter = predictionRotateTicks
+        setTargetRotation(predictionTargetRotation!!, predictionRotationSettings, predictionRotateTicks)
+    }
+
+    private fun applyPredictionPacket(packet: Packet<*>, player: EntityPlayerSP) {
+        when (packet) {
+            is S12PacketEntityVelocity -> {
+                if (packet.entityID != player.entityId) return
+                player.motionX = packet.motionX / 8000.0
+                player.motionY = packet.motionY / 8000.0
+                player.motionZ = packet.motionZ / 8000.0
+            }
+            is S27PacketExplosion -> {
+                player.motionX += packet.field_149152_f.toDouble()
+                player.motionY += packet.field_149153_g.toDouble()
+                player.motionZ += packet.field_149159_h.toDouble()
+            }
+        }
     }
 
     private fun handleVelocity(event: PacketEvent) {

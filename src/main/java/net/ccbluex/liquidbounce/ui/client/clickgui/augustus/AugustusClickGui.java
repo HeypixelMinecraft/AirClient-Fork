@@ -48,8 +48,10 @@ public class AugustusClickGui extends GuiScreen {
         float pickerX;
         float pickerY;
         float hueY;
+        float opacityY;
         boolean draggingColor;
         boolean draggingHue;
+        boolean draggingOpacity;
     }
 
     public static float lastPosX = -1337F;
@@ -177,6 +179,7 @@ public class AugustusClickGui extends GuiScreen {
             for (ColorPickerState state : colorPickerStates.values()) {
                 state.draggingColor = false;
                 state.draggingHue = false;
+                state.draggingOpacity = false;
             }
         }
 
@@ -219,18 +222,27 @@ public class AugustusClickGui extends GuiScreen {
         drawCategories(mouseX, mouseY, mouseButton, event);
         drawModules(mouseX, mouseY, mouseButton, event);
         drawValues(mouseX, mouseY, mouseButton, event);
-        updateDraggingValues(mouseX);
+        updateDraggingValues(mouseX, mouseY);
     }
 
     private void drawCategories(int mouseX, int mouseY, int mouseButton, GuiEvent event) {
         float categoryX = posX + 105F;
+        float clipX = posX + 92F;
+        float clipY = posY + 18F;
+        float clipW = width - 94F;
+        float clipH = 24F;
+
+        if (event == GuiEvent.DRAW) scissor(clipX, clipY, clipW, clipH, true);
+
         for (Category category : Category.values()) {
             if (!category.shouldShow()) continue;
 
             String name = category.name();
             float textWidth = normalWidth(name);
             boolean selected = category == selectedCategory;
-            boolean categoryHovered = hovered(mouseX, mouseY, categoryX, posY + 20F, textWidth, normalHeight());
+            boolean inBounds = categoryX + textWidth >= clipX && categoryX <= clipX + clipW;
+            boolean categoryHovered = inBounds && hovered(mouseX, mouseY, categoryX, posY + 20F, textWidth, normalHeight())
+                    && hovered(mouseX, mouseY, clipX, clipY, clipW, clipH);
 
             if (event == GuiEvent.DRAW) {
                 int color = selected ? accent().getRGB() : categoryHovered ? new Color(230, 230, 230).getRGB() : new Color(180, 180, 180).getRGB();
@@ -254,6 +266,8 @@ public class AugustusClickGui extends GuiScreen {
         if (event == GuiEvent.DRAW && selectedCategory != null) {
             drawRect(categoryLineX, posY + 22F + normalHeight(), normalWidth(selectedCategory.name()), 2F, accent().getRGB());
         }
+
+        if (event == GuiEvent.DRAW) scissor(0F, 0F, 0F, 0F, false);
     }
 
     private void drawModules(int mouseX, int mouseY, int mouseButton, GuiEvent event) {
@@ -263,16 +277,19 @@ public class AugustusClickGui extends GuiScreen {
         float listY = posY + 18F;
         float listW = 90F;
         float listH = height - 18F;
+        float contentHeight = modulesInCategory(selectedCategory).size() * (normalHeight() + 5F);
+        moduleScroll = clampScroll(moduleScroll, contentHeight, listH - 8F);
 
         if (event == GuiEvent.DRAW && hovered(mouseX, mouseY, listX, listY, listW, listH)) {
-            moduleScroll = Math.min(0F, moduleScroll + Mouse.getDWheel() / 10F);
+            moduleScroll = clampScroll(moduleScroll + Mouse.getDWheel() / 10F, contentHeight, listH - 8F);
         }
 
         if (event == GuiEvent.DRAW) scissor(listX, listY, listW, listH, true);
 
         float moduleY = posY + 26F + moduleScroll;
         for (Module module : modulesInCategory(selectedCategory)) {
-            boolean moduleHovered = hovered(mouseX, mouseY, posX + 8F, moduleY - 3F, 74F, normalHeight() + 4F);
+            boolean inBounds = moduleY >= listY && moduleY + normalHeight() <= listY + listH;
+            boolean moduleHovered = inBounds && hovered(mouseX, mouseY, posX + 8F, moduleY - 3F, 74F, normalHeight() + 4F);
             if (event == GuiEvent.DRAW) {
                 float drawX = posX + 8F;
                 if (module == selectedModule) {
@@ -323,21 +340,32 @@ public class AugustusClickGui extends GuiScreen {
         currentY += normalHeight() + 10F;
 
         if (event == GuiEvent.DRAW && hovered(mouseX, mouseY, posX + 92F, posY + 42F, width - 94F, height - 44F)) {
-            valueScroll = Math.min(0F, valueScroll + Mouse.getDWheel() / 10F);
+            valueScroll = clampScroll(valueScroll + Mouse.getDWheel() / 10F, valuesContentHeight(), height - (currentY - posY) - 2F);
         }
 
         if (event == GuiEvent.DRAW) scissor(posX + 92F, currentY - 2F, width - 94F, height - (currentY - posY) - 2F, true);
 
+        float clipY = currentY - 2F;
+        float clipH = height - (currentY - posY) - 2F;
         currentY += valueScroll;
         for (Value<?> value : selectedModule.getValues()) {
             if (!value.shouldRender()) continue;
-            currentY = drawValue(value, currentY, mouseX, mouseY, mouseButton, event);
+            float oldY = currentY;
+            currentY = drawValue(value, currentY, mouseX, mouseY, mouseButton, event, clipY, clipH);
+            if (currentY == oldY) currentY += normalHeight() + 5F;
         }
+
+        valueScroll = clampScroll(valueScroll, valuesContentHeight(), clipH);
 
         if (event == GuiEvent.DRAW) scissor(0F, 0F, 0F, 0F, false);
     }
 
-    private float drawValue(Value<?> value, float y, int mouseX, int mouseY, int mouseButton, GuiEvent event) {
+    private float drawValue(Value<?> value, float y, int mouseX, int mouseY, int mouseButton, GuiEvent event, float clipY, float clipH) {
+        float height = valueHeight(value);
+        boolean inBounds = y + height >= clipY && y <= clipY + clipH;
+        if (!inBounds) return y + height;
+        if (event != GuiEvent.DRAW && !hovered(mouseX, mouseY, posX + 92F, clipY, width - 94F, clipH)) return y + height;
+
         float x = posX + 100F;
         if (value instanceof BoolValue) {
             BoolValue boolValue = (BoolValue) value;
@@ -444,45 +472,63 @@ public class AugustusClickGui extends GuiScreen {
     private float drawColorValue(ColorValue colorValue, float y, int mouseX, int mouseY, int mouseButton, GuiEvent event) {
         float x = posX + 100F;
         ColorPickerState state = colorPickerStates.computeIfAbsent(colorValue, key -> new ColorPickerState());
+        float previewX = x + normalWidth(colorValue.getName() + ": ") + 4F;
         state.pickerX = x;
         state.pickerY = y + normalHeight() + 4F;
         state.hueY = state.pickerY + 54F;
+        state.opacityY = state.hueY + 9F;
 
         if (event == GuiEvent.DRAW) {
             Color selected = colorValue.selectedColor();
             drawNormal(colorValue.getName() + ": ", x, y, new Color(200, 200, 200).getRGB());
-            drawRect(x + normalWidth(colorValue.getName() + ": ") + 4F, y - 1F, 22F, 10F, selected.getRGB());
+            drawRect(previewX, y - 1F, 22F, 10F, selected.getRGB());
 
-            Color hueColor = Color.getHSBColor(colorValue.getHueSliderY(), 1F, 1F);
-            drawRect(state.pickerX, state.pickerY, 100F, 50F, hueColor.getRGB());
-            for (int sx = 0; sx < 100; sx++) {
-                float saturation = sx / 100F;
-                drawRect(state.pickerX + sx, state.pickerY, 1F, 50F, new Color(255, 255, 255, (int) (255F * (1F - saturation))).getRGB());
-            }
-            for (int sy = 0; sy < 50; sy++) {
-                float brightness = 1F - sy / 50F;
-                drawRect(state.pickerX, state.pickerY + sy, 100F, 1F, new Color(0, 0, 0, (int) (255F * (1F - brightness))).getRGB());
-            }
-            for (int sx = 0; sx < 100; sx++) {
-                drawRect(state.pickerX + sx, state.hueY, 1F, 5F, Color.getHSBColor(sx / 100F, 1F, 1F).getRGB());
-            }
+            if (colorValue.getShowPicker()) {
+                Color hueColor = Color.getHSBColor(colorValue.getHueSliderY(), 1F, 1F);
+                drawRect(state.pickerX, state.pickerY, 100F, 50F, hueColor.getRGB());
+                for (int sx = 0; sx < 100; sx++) {
+                    float saturation = sx / 100F;
+                    drawRect(state.pickerX + sx, state.pickerY, 1F, 50F, new Color(255, 255, 255, (int) (255F * (1F - saturation))).getRGB());
+                }
+                for (int sy = 0; sy < 50; sy++) {
+                    float brightness = 1F - sy / 50F;
+                    drawRect(state.pickerX, state.pickerY + sy, 100F, 1F, new Color(0, 0, 0, (int) (255F * (1F - brightness))).getRGB());
+                }
+                for (int sx = 0; sx < 100; sx++) {
+                    drawRect(state.pickerX + sx, state.hueY, 1F, 5F, Color.getHSBColor(sx / 100F, 1F, 1F).getRGB());
+                }
+                for (int sx = 0; sx < 100; sx++) {
+                    int alpha = MathHelper.clamp_int((int) (sx / 99F * 255F), 0, 255);
+                    Color alphaColor = new Color(selected.getRed(), selected.getGreen(), selected.getBlue(), alpha);
+                    drawRect(state.pickerX + sx, state.opacityY, 1F, 5F, alphaColor.getRGB());
+                }
 
-            Vector2f pos = colorValue.getColorPickerPos();
-            float markerX = state.pickerX + pos.x * 100F;
-            float markerY = state.pickerY + pos.y * 50F;
-            drawRect(markerX - 2F, markerY - 2F, 4F, 4F, Color.WHITE.getRGB());
-            float hueMarker = state.pickerX + colorValue.getHueSliderY() * 100F;
-            drawRect(hueMarker - 1F, state.hueY - 1F, 2F, 7F, Color.WHITE.getRGB());
+                Vector2f pos = colorValue.getColorPickerPos();
+                float markerX = state.pickerX + pos.x * 100F;
+                float markerY = state.pickerY + pos.y * 50F;
+                drawRect(markerX - 2F, markerY - 2F, 4F, 4F, Color.WHITE.getRGB());
+                float hueMarker = state.pickerX + colorValue.getHueSliderY() * 100F;
+                drawRect(hueMarker - 1F, state.hueY - 1F, 2F, 7F, Color.WHITE.getRGB());
+                float opacityMarker = state.pickerX + colorValue.getOpacitySliderY() * 100F;
+                drawRect(opacityMarker - 1F, state.opacityY - 1F, 2F, 7F, Color.WHITE.getRGB());
+            }
         } else if (event == GuiEvent.CLICK && mouseButton == 0) {
-            if (hovered(mouseX, mouseY, state.pickerX, state.pickerY, 100F, 50F)) {
-                state.draggingColor = true;
-                updateColor(mouseX, mouseY, colorValue, state);
-            } else if (hovered(mouseX, mouseY, state.pickerX, state.hueY, 100F, 5F)) {
-                state.draggingHue = true;
-                updateHue(mouseX, colorValue, state);
+            if (hovered(mouseX, mouseY, previewX, y - 1F, 22F, 10F)) {
+                colorValue.setShowPicker(!colorValue.getShowPicker());
+            } else if (colorValue.getShowPicker()) {
+                if (hovered(mouseX, mouseY, state.pickerX, state.pickerY, 100F, 50F)) {
+                    state.draggingColor = true;
+                    updateColor(mouseX, mouseY, colorValue, state);
+                } else if (hovered(mouseX, mouseY, state.pickerX, state.hueY, 100F, 5F)) {
+                    state.draggingHue = true;
+                    updateHue(mouseX, colorValue, state);
+                } else if (hovered(mouseX, mouseY, state.pickerX, state.opacityY, 100F, 5F)) {
+                    state.draggingOpacity = true;
+                    updateOpacity(mouseX, colorValue, state);
+                }
             }
         }
-        return y + normalHeight() + 68F;
+        return y + valueHeight(colorValue);
     }
 
     private void drawSlider(Value<?> value, float y, float sliderX, float sliderWidth, double current, double min, double max, GuiEvent event) {
@@ -501,7 +547,7 @@ public class AugustusClickGui extends GuiScreen {
         drawNormal(valueText, sliderX + sliderWidth / 2F - normalWidth(valueText) / 2F, y - 1F, new Color(230, 230, 230).getRGB());
     }
 
-    private void updateDraggingValues(int mouseX) {
+    private void updateDraggingValues(int mouseX, int mouseY) {
         if (draggingFloat != null && Mouse.isButtonDown(0)) {
             float sliderX = posX + 100F + normalWidth(draggingFloat.getName() + ": ") + 4F;
             updateFloat(mouseX, sliderX, 98F, draggingFloat);
@@ -514,9 +560,11 @@ public class AugustusClickGui extends GuiScreen {
             ColorValue value = entry.getKey();
             ColorPickerState state = entry.getValue();
             if (state.draggingColor && Mouse.isButtonDown(0)) {
-                updateColor((int) (Mouse.getX() * this.width / mc.displayWidth), (int) (this.height - Mouse.getY() * this.height / mc.displayHeight - 1), value, state);
+                updateColor(mouseX, mouseY, value, state);
             } else if (state.draggingHue && Mouse.isButtonDown(0)) {
-                updateHue((int) (Mouse.getX() * this.width / mc.displayWidth), value, state);
+                updateHue(mouseX, value, state);
+            } else if (state.draggingOpacity && Mouse.isButtonDown(0)) {
+                updateOpacity(mouseX, value, state);
             }
         }
     }
@@ -541,6 +589,11 @@ public class AugustusClickGui extends GuiScreen {
         updateColorFromPicker(value);
     }
 
+    private void updateOpacity(int mouseX, ColorValue value, ColorPickerState state) {
+        value.setOpacitySliderY(MathHelper.clamp_float((mouseX - state.pickerX) / 100F, 0F, 1F));
+        updateColorFromPicker(value);
+    }
+
     private void updateColor(int mouseX, int mouseY, ColorValue value, ColorPickerState state) {
         float saturation = MathHelper.clamp_float((mouseX - state.pickerX) / 100F, 0F, 1F);
         float brightnessPicker = MathHelper.clamp_float((mouseY - state.pickerY) / 50F, 0F, 1F);
@@ -551,13 +604,49 @@ public class AugustusClickGui extends GuiScreen {
     private void updateColorFromPicker(ColorValue value) {
         Vector2f picker = value.getColorPickerPos();
         Color color = new Color(Color.HSBtoRGB(value.getHueSliderY(), picker.x, 1F - picker.y));
-        value.set(new Color(color.getRed(), color.getGreen(), color.getBlue(), value.selectedColor().getAlpha()), true);
+        value.set(new Color(color.getRed(), color.getGreen(), color.getBlue(), MathHelper.clamp_int((int) (value.getOpacitySliderY() * 255F), 0, 255)), true);
     }
 
     private List<Module> modulesInCategory(Category category) {
         return LiquidBounce.INSTANCE.getModuleManager().getModules().stream()
                 .filter(module -> module.getCategory() == category)
                 .collect(Collectors.toList());
+    }
+
+    private float valuesContentHeight() {
+        if (selectedModule == null) return 0F;
+
+        float contentHeight = 0F;
+        for (Value<?> value : selectedModule.getValues()) {
+            if (value.shouldRender()) contentHeight += valueHeight(value);
+        }
+        return contentHeight;
+    }
+
+    private float valueHeight(Value<?> value) {
+        if (value instanceof ColorValue) {
+            ColorValue colorValue = (ColorValue) value;
+            return normalHeight() + (colorValue.getShowPicker() ? 77F : 5F);
+        }
+        if (value instanceof ListValue) {
+            ListValue listValue = (ListValue) value;
+            float modeX = posX + 100F + normalWidth(value.getName() + ": ");
+            float rows = 1F;
+            for (String mode : listValue.getValues()) {
+                if (modeX > posX + width - 55F) {
+                    modeX = posX + 100F + normalWidth(value.getName() + ": ");
+                    rows += 1F;
+                }
+                modeX += normalWidth(mode + ", ");
+            }
+            return rows * normalHeight() + Math.max(0F, rows - 1F) * 2F + 6F;
+        }
+        return normalHeight() + 6F;
+    }
+
+    private float clampScroll(float scroll, float contentHeight, float visibleHeight) {
+        float min = Math.min(0F, visibleHeight - contentHeight);
+        return MathHelper.clamp_float(scroll, min, 0F);
     }
 
     private void updateAnimations() {
