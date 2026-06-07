@@ -116,6 +116,7 @@ public abstract class MixinGuiInGame extends MixinGui {
             GlStateManager.disableRescaleNormal();
             GlStateManager.disableBlend();
             GlStateManager.translate(0F, RenderUtils.INSTANCE.getYPosOffset(), 0F);
+            liquidBounce$injectRender2DEvent(delta);
             ci.cancel();
             return;
         }
