@@ -128,6 +128,6 @@ gradlew setupDevWorkspace build
 
 ### 优化与修复 / Optimization & Fixes
 - [ ] 基础性能优化 / Basic performance optimization
-- [ ] 内存占用优化 / Memory usage optimization
+- [x] 内存占用优化 / Memory usage optimization
 - [ ] 兼容性修复 / Compatibility fixes
 - [ ] 反检测改进 / Anti-detection improvements
