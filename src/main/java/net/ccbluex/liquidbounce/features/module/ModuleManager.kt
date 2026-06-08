@@ -8,7 +8,6 @@ import net.ccbluex.liquidbounce.event.*
 import net.ccbluex.liquidbounce.features.command.CommandManager.registerCommand
 import net.ccbluex.liquidbounce.features.module.modules.combat.*
 import net.ccbluex.liquidbounce.features.module.modules.exploit.*
-import net.ccbluex.liquidbounce.features.module.modules.`fun`.AutoFreezeFunny
 import net.ccbluex.liquidbounce.features.module.modules.`fun`.AutoL
 import net.ccbluex.liquidbounce.features.module.modules.`fun`.Derp
 import net.ccbluex.liquidbounce.features.module.modules.`fun`.FullDisabler
@@ -118,7 +117,6 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             Damage,
             DashTrail,
             Derp,
-            AutoFreezeFunny,
             ESP2D,
             ESP,
             DamageESP,
