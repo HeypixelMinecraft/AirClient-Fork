@@ -302,10 +302,6 @@ public abstract class MixinMinecraft {
         return SilentHotbar.INSTANCE.getCurrentSlot();
     }
 
-    @Redirect(method = {"loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;)V", "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V"}, at = @At(value = "INVOKE", target = "Ljava/lang/System;gc()V"))
-    private void suppressExplicitGc() {
-    }
-
     @Inject(method = "runTick", at = @At(value = "FIELD", target = "Lnet/minecraft/client/entity/EntityPlayerSP;inventory:Lnet/minecraft/entity/player/InventoryPlayer;"))
     private void injectSilentHotbarManualPressDetection(CallbackInfo ci) {
         SilentHotbar.INSTANCE.setPressedAtSlot(true);
