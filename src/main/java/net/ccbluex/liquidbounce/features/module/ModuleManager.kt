@@ -281,6 +281,7 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             FireballTrajectory,
             net.ccbluex.liquidbounce.ui.client.clickgui.augustus.AugustusClickGUI,
             net.ccbluex.liquidbounce.ui.client.clickgui.opai.OpaiGUI,
+            net.ccbluex.liquidbounce.ui.client.clickgui.neverlose.NeverloseClickGui,
             AntiKnockBack
         )
 
