@@ -7,6 +7,7 @@ package net.ccbluex.liquidbounce.ui.client.clickgui.neverlose
 
 import net.ccbluex.liquidbounce.LiquidBounce
 import net.ccbluex.liquidbounce.config.BoolValue
+import net.ccbluex.liquidbounce.config.ColorValue
 import net.ccbluex.liquidbounce.config.FloatValue
 import net.ccbluex.liquidbounce.config.IntValue
 import net.ccbluex.liquidbounce.config.ListValue
@@ -41,10 +42,11 @@ class NeverloseScreen : GuiScreen() {
     private var posY = 40
     private var moduleScroll = 0
     private var valueScroll = 0
+    private var configDirty = false
 
-    private val guiWidth = 520
-    private val guiHeight = 420
-    private val sidebarWidth = 136
+    private val guiWidth = 680
+    private val guiHeight = 430
+    private val sidebarWidth = 150
     private val headerHeight = 48
 
     override fun initGui() {
@@ -55,6 +57,7 @@ class NeverloseScreen : GuiScreen() {
 
     override fun onGuiClosed() {
         Keyboard.enableRepeatEvents(false)
+        saveDirtyModuleConfig()
     }
 
     override fun doesGuiPauseGame() = false
@@ -124,7 +127,7 @@ class NeverloseScreen : GuiScreen() {
     private fun drawModules(mouseX: Int, mouseY: Int) {
         val listX = posX + sidebarWidth + 12
         val listY = posY + headerHeight + 12
-        val listWidth = 168
+        val listWidth = 190
         val listHeight = guiHeight - headerHeight - 24
         val modules = filteredModules()
 
@@ -149,9 +152,9 @@ class NeverloseScreen : GuiScreen() {
     }
 
     private fun drawValues(mouseX: Int, mouseY: Int) {
-        val valueX = posX + sidebarWidth + 192
+        val valueX = posX + sidebarWidth + 218
         val valueY = posY + headerHeight + 12
-        val valueWidth = guiWidth - sidebarWidth - 204
+        val valueWidth = guiWidth - sidebarWidth - 230
         val valueHeight = guiHeight - headerHeight - 24
         val module = selectedModule
 
@@ -188,7 +191,9 @@ class NeverloseScreen : GuiScreen() {
             RoundedUtil.drawRound(x.toFloat(), y.toFloat(), width.toFloat(), 24f, 4f, HOVER)
         }
 
-        Fonts.font30.drawString(value.name, (x + 6).toFloat(), (y + 8).toFloat(), TEXT.rgb)
+        val maxNameWidth = width - 160
+        val displayName = fitText(value.name, maxNameWidth)
+        Fonts.font30.drawString(displayName, (x + 6).toFloat(), (y + 8).toFloat(), TEXT.rgb)
 
         when (value) {
             is BoolValue -> drawBooleanValue(value, x, y, width)
@@ -196,7 +201,8 @@ class NeverloseScreen : GuiScreen() {
             is FloatValue -> drawNumberValue(value.get(), value.minimum, value.maximum, x, y, width, "%.2f".format(value.get()))
             is ListValue -> drawChoiceValue(value, x, y, width)
             is TextValue -> drawTextValue(value, x, y, width)
-            else -> Fonts.font30.drawString(value.toText(), (x + width - Fonts.font30.getStringWidth(value.toText()) - 6).toFloat(), (y + 8).toFloat(), MUTED.rgb)
+            is ColorValue -> drawColorValue(value, x, y, width)
+            else -> Fonts.font30.drawString(fitText(value.toText(), 120), (x + width - Fonts.font30.getStringWidth(fitText(value.toText(), 120)) - 6).toFloat(), (y + 8).toFloat(), MUTED.rgb)
         }
     }
 
@@ -210,24 +216,47 @@ class NeverloseScreen : GuiScreen() {
     }
 
     private fun drawNumberValue(current: Float, min: Float, max: Float, x: Int, y: Int, width: Int, text: String) {
-        val sliderX = x + 92
+        val textWidth = Fonts.font30.getStringWidth(text)
+        val sliderX = x + width - 152
         val sliderY = y + 17
-        val sliderWidth = width - 150
-        val progress = ((current - min) / (max - min)).coerceIn(0f, 1f)
-        Fonts.font30.drawString(text, (x + width - Fonts.font30.getStringWidth(text) - 6).toFloat(), (y + 8).toFloat(), MUTED.rgb)
+        val sliderWidth = 96
+        val progress = if (max == min) 0f else ((current - min) / (max - min)).coerceIn(0f, 1f)
+        Fonts.font30.drawString(text, (x + width - textWidth - 6).toFloat(), (y + 8).toFloat(), MUTED.rgb)
         RoundedUtil.drawRound(sliderX.toFloat(), sliderY.toFloat(), sliderWidth.toFloat(), 4f, 2f, SLIDER_BG)
         RoundedUtil.drawRound(sliderX.toFloat(), sliderY.toFloat(), sliderWidth * progress, 4f, 2f, ACCENT)
         RoundedUtil.drawRound((sliderX + sliderWidth * progress - 3).toFloat(), (sliderY - 2).toFloat(), 8f, 8f, 4f, ACCENT)
     }
 
     private fun drawChoiceValue(value: ListValue, x: Int, y: Int, width: Int) {
-        val text = value.get()
+        val text = fitText(value.get(), 100)
         Fonts.font30.drawString(text, (x + width - Fonts.font30.getStringWidth(text) - 6).toFloat(), (y + 8).toFloat(), ACCENT.rgb)
     }
 
     private fun drawTextValue(value: TextValue, x: Int, y: Int, width: Int) {
-        val text = value.get().take(18)
+        val text = fitText(value.get(), 100)
         Fonts.font30.drawString(text, (x + width - Fonts.font30.getStringWidth(text) - 6).toFloat(), (y + 8).toFloat(), MUTED.rgb)
+    }
+
+    private fun drawColorValue(value: ColorValue, x: Int, y: Int, width: Int) {
+        val color = value.selectedColor()
+        val previewX = x + width - 24
+        val hueX = x + width - 126
+        val hueY = y + 21
+        val hueWidth = 72
+        val hex = if (value.rainbow) "Rainbow" else "#%02X%02X%02X".format(color.red, color.green, color.blue)
+        val displayText = fitText(hex, 64)
+
+        RoundedUtil.drawRound(previewX.toFloat(), (y + 6).toFloat(), 16f, 16f, 4f, Color(color.red, color.green, color.blue, color.alpha))
+        Fonts.font30.drawString(displayText, (previewX - Fonts.font30.getStringWidth(displayText) - 8).toFloat(), (y + 8).toFloat(), if (value.rainbow) ACCENT.rgb else MUTED.rgb)
+        RenderUtils.drawRect((hueX - 1).toFloat(), (hueY - 1).toFloat(), (hueX + hueWidth + 1).toFloat(), (hueY + 4).toFloat(), LINE)
+
+        for (i in 0 until hueWidth) {
+            val hueColor = Color(Color.HSBtoRGB(i / hueWidth.toFloat(), 1f, 1f))
+            RenderUtils.drawRect((hueX + i).toFloat(), hueY.toFloat(), (hueX + i + 1).toFloat(), (hueY + 3).toFloat(), hueColor.rgb)
+        }
+
+        val markerX = hueX + (value.hueSliderY.coerceIn(0f, 1f) * hueWidth).roundToInt()
+        RenderUtils.drawRect((markerX - 1).toFloat(), (hueY - 2).toFloat(), (markerX + 1).toFloat(), (hueY + 5).toFloat(), TEXT.rgb)
     }
 
     private fun drawUserFooter() {
@@ -284,13 +313,16 @@ class NeverloseScreen : GuiScreen() {
         var y = listY + 28 + moduleScroll
 
         modules.forEach { module ->
-            if (isHovered(listX + 8, y, 152, 22, mouseX, mouseY)) {
+            if (isHovered(listX + 8, y, 174, 22, mouseX, mouseY)) {
                 when (mouseButton) {
                     0 -> {
                         selectedModule = module
                         valueScroll = 0
                     }
-                    1 -> module.toggle()
+                    1 -> {
+                        module.toggle()
+                        configDirty = true
+                    }
                 }
                 return
             }
@@ -300,19 +332,49 @@ class NeverloseScreen : GuiScreen() {
 
     private fun handleValueClick(mouseX: Int, mouseY: Int, mouseButton: Int) {
         val module = selectedModule ?: return
-        val valueX = posX + sidebarWidth + 192
+        val valueX = posX + sidebarWidth + 218
         val valueY = posY + headerHeight + 12
-        val valueWidth = guiWidth - sidebarWidth - 204
+        val valueWidth = guiWidth - sidebarWidth - 230
         var y = valueY + 48 + valueScroll
 
         module.values.filter { it.shouldRender() }.forEach { value ->
             if (isHovered(valueX + 12, y, valueWidth - 24, 24, mouseX, mouseY)) {
                 when (value) {
-                    is BoolValue -> if (mouseButton == 0) value.toggle()
-                    is IntValue -> if (mouseButton == 0) setIntValueByMouse(value, mouseX, valueX + 104, valueWidth - 174)
-                    is FloatValue -> if (mouseButton == 0) setFloatValueByMouse(value, mouseX, valueX + 104, valueWidth - 174)
-                    is ListValue -> if (mouseButton == 0) nextChoice(value) else if (mouseButton == 1) previousChoice(value)
-                    is TextValue -> if (mouseButton == 1) value.set("")
+                    is BoolValue -> if (mouseButton == 0) {
+                        value.toggle()
+                        configDirty = true
+                    }
+                    is IntValue -> if (mouseButton == 0) {
+                        setIntValueByMouse(value, mouseX, valueX + valueWidth - 140, 96)
+                        configDirty = true
+                    }
+                    is FloatValue -> if (mouseButton == 0) {
+                        setFloatValueByMouse(value, mouseX, valueX + valueWidth - 140, 96)
+                        configDirty = true
+                    }
+                    is ListValue -> {
+                        if (mouseButton == 0) {
+                            nextChoice(value)
+                            configDirty = true
+                        } else if (mouseButton == 1) {
+                            previousChoice(value)
+                            configDirty = true
+                        }
+                    }
+                    is TextValue -> if (mouseButton == 1) {
+                        value.set("")
+                        configDirty = true
+                    }
+                    is ColorValue -> {
+                        if (mouseButton == 0) {
+                            setColorValueByMouse(value, mouseX, valueX + valueWidth - 138, 72)
+                            configDirty = true
+                        } else if (mouseButton == 1) {
+                            value.rainbow = !value.rainbow
+                            value.set(value.selectedColor())
+                            configDirty = true
+                        }
+                    }
                     else -> Unit
                 }
                 return
@@ -347,20 +409,26 @@ class NeverloseScreen : GuiScreen() {
 
     override fun mouseReleased(mouseX: Int, mouseY: Int, state: Int) {
         if (state == 0) dragging = false
-        saveConfig(modulesConfig)
+        saveDirtyModuleConfig()
         super.mouseReleased(mouseX, mouseY, state)
+    }
+
+    private fun saveDirtyModuleConfig() {
+        if (!configDirty) return
+        saveConfig(modulesConfig)
+        configDirty = false
     }
 
     private fun handleWheel(mouseX: Int, mouseY: Int) {
         val wheel = Mouse.getDWheel()
         if (wheel == 0) return
 
-        if (isHovered(posX + sidebarWidth + 12, posY + headerHeight + 12, 168, guiHeight - headerHeight - 24, mouseX, mouseY)) {
-            moduleScroll = (moduleScroll + if (wheel > 0) 18 else -18).coerceAtMost(0)
+        if (isHovered(posX + sidebarWidth + 12, posY + headerHeight + 12, 190, guiHeight - headerHeight - 24, mouseX, mouseY)) {
+            moduleScroll = (moduleScroll + if (wheel > 0) 18 else -18).coerceIn(-maxModuleScroll(), 0)
         }
 
-        if (isHovered(posX + sidebarWidth + 192, posY + headerHeight + 12, guiWidth - sidebarWidth - 204, guiHeight - headerHeight - 24, mouseX, mouseY)) {
-            valueScroll = (valueScroll + if (wheel > 0) 18 else -18).coerceAtMost(0)
+        if (isHovered(posX + sidebarWidth + 218, posY + headerHeight + 12, guiWidth - sidebarWidth - 230, guiHeight - headerHeight - 24, mouseX, mouseY)) {
+            valueScroll = (valueScroll + if (wheel > 0) 18 else -18).coerceIn(-maxValueScroll(), 0)
         }
     }
 
@@ -373,8 +441,34 @@ class NeverloseScreen : GuiScreen() {
     }
 
     private fun valueHeight(value: Value<*>) = when (value) {
-        is IntValue, is FloatValue -> 30
+        is IntValue, is FloatValue, is ColorValue -> 30
         else -> 26
+    }
+
+    private fun maxModuleScroll(): Int {
+        val visibleHeight = guiHeight - headerHeight - 52
+        val contentHeight = filteredModules().size * 26
+        return (contentHeight - visibleHeight).coerceAtLeast(0)
+    }
+
+    private fun maxValueScroll(): Int {
+        val visibleHeight = guiHeight - headerHeight - 72
+        val contentHeight = selectedModule?.values
+            ?.filter { it.shouldRender() }
+            ?.sumOf { valueHeight(it) }
+            ?: 0
+        return (contentHeight - visibleHeight).coerceAtLeast(0)
+    }
+
+    private fun fitText(text: String, maxWidth: Int): String {
+        if (Fonts.font30.getStringWidth(text) <= maxWidth) return text
+
+        var clipped = text
+        while (clipped.isNotEmpty() && Fonts.font30.getStringWidth("$clipped...") > maxWidth) {
+            clipped = clipped.dropLast(1)
+        }
+
+        return if (clipped.isEmpty()) "..." else "$clipped..."
     }
 
     private fun setIntValueByMouse(value: IntValue, mouseX: Int, sliderX: Int, sliderWidth: Int) {
@@ -385,6 +479,18 @@ class NeverloseScreen : GuiScreen() {
     private fun setFloatValueByMouse(value: FloatValue, mouseX: Int, sliderX: Int, sliderWidth: Int) {
         val progress = ((mouseX - sliderX).toFloat() / sliderWidth).coerceIn(0f, 1f)
         value.set(value.minimum + (value.maximum - value.minimum) * progress)
+    }
+
+    private fun setColorValueByMouse(value: ColorValue, mouseX: Int, hueX: Int, hueWidth: Int) {
+        val hue = ((mouseX - hueX).toFloat() / hueWidth).coerceIn(0f, 1f)
+        val saturation = value.colorPickerPos.x.coerceIn(0f, 1f).takeIf { it > 0f } ?: 1f
+        val brightness = (1f - value.colorPickerPos.y).coerceIn(0f, 1f).takeIf { it > 0f } ?: 1f
+        val alpha = (value.opacitySliderY.coerceIn(0f, 1f) * 255).roundToInt().coerceIn(0, 255)
+        val color = Color(Color.HSBtoRGB(hue, saturation, brightness), true)
+
+        value.rainbow = false
+        value.hueSliderY = hue
+        value.set(Color(color.red, color.green, color.blue, alpha))
     }
 
     private fun nextChoice(value: ListValue) {

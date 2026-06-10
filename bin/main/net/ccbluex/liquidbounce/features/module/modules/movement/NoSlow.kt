@@ -17,6 +17,7 @@ import net.ccbluex.liquidbounce.utils.inventory.SilentHotbar
 import net.ccbluex.liquidbounce.utils.movement.MovementUtils.hasMotion
 import net.ccbluex.liquidbounce.utils.timing.MSTimer
 import net.ccbluex.liquidbounce.utils.timing.TickTimer
+import net.minecraft.block.*
 import net.minecraft.item.*
 import net.minecraft.network.Packet
 import net.minecraft.network.PacketBuffer
@@ -32,12 +33,13 @@ import net.minecraft.network.status.client.C01PacketPing
 import net.minecraft.network.status.server.S01PacketPong
 import net.minecraft.util.BlockPos
 import net.minecraft.util.EnumFacing
+import net.minecraft.util.MovingObjectPosition
 
 object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val swordMode by choices(
         "SwordMode",
-        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "postplace", "Matrix", "PredictionSemi", "Prediction"),
+        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "postplace", "Matrix", "PredictionSemi", "Prediction", "GrimAC"),
         "None"
     )
 
@@ -53,7 +55,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val consumeMode by choices(
         "ConsumeMode",
-        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Intave", "Drop"),
+        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Intave", "OldIntave", "GrimAC", "Drop"),
         "None"
     )
 
@@ -70,7 +72,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val bowPacket by choices(
         "BowMode",
-        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08"),
+        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "GrimAC"),
         "None"
     )
 
@@ -86,6 +88,9 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
     private var shouldNoSlow = false
 
     private var hasDropped = false
+    private var grimEating = true
+    private var grimLastFoodAmount = 0
+    private var grimFoodSpeed = 0.2f
     private var predictionDelay = 0
     private var predictionPost = false
     private var predictionBlockTick = 0
@@ -105,6 +110,9 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
         BlinkTimer.reset()
         BlinkUtils.unblink()
         hasDropped = false
+        grimEating = true
+        grimLastFoodAmount = 0
+        grimFoodSpeed = 0.2f
         predictionDelay = 0
         predictionPost = false
         predictionBlockTick = 0
@@ -188,8 +196,19 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
                     "intave" -> {
                         if (event.eventState == EventState.PRE) {
-                            sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.UP))
+                            sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.UP), false)
                         }
+                    }
+
+                    "oldintave" -> {
+                        if (event.eventState == EventState.PRE) {
+                            sendPacket(C09PacketHeldItemChange(player.inventory.currentItem % 8 + 1), false)
+                            sendPacket(C09PacketHeldItemChange(player.inventory.currentItem), false)
+                        }
+                    }
+
+                    "grimac" -> {
+                        handleGrimConsumeMotion(player, heldItem)
                     }
                 }
             }
@@ -220,6 +239,11 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
                         }
                     }
                 }
+
+                "grimac" ->
+                    if (event.eventState == EventState.POST) {
+                        sendPacket(C08PacketPlayerBlockPlacement(BlockPos(-1, -1, -1), 255, heldItem, 0f, 0f, 0f), false)
+                    }
             }
         }
 
@@ -308,6 +332,12 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
         if (event.isCancelled || shouldSwap)
             return@handler
+
+        if (consumeMode == "GrimAC") {
+            handleGrimConsumePacket(event, packet, player)
+            if (event.isCancelled)
+                return@handler
+        }
 
         if (swordMode == "Prediction" && predictionBlink && predictionPost && packet is C03PacketPlayer) {
             BlinkUtils.blink(packet, event, sent = true, receive = false)
@@ -442,7 +472,14 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
     }
 
     private fun getMultiplier(item: Item?, isForward: Boolean) = when (item) {
-        is ItemFood, is ItemPotion, is ItemBucketMilk -> if (isForward) consumeForwardMultiplier else consumeStrafeMultiplier
+        is ItemFood, is ItemPotion, is ItemBucketMilk ->
+            if (consumeMode == "GrimAC" && isUsingConsumable()) {
+                grimFoodSpeed
+            } else if (isForward) {
+                consumeForwardMultiplier
+            } else {
+                consumeStrafeMultiplier
+            }
 
         is ItemSword -> if (isForward) blockForwardMultiplier else blockStrafeMultiplier
 
@@ -450,6 +487,102 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
         else -> 0.2F
     }
+
+    private fun handleGrimConsumeMotion(player: net.minecraft.client.entity.EntityPlayerSP, heldItem: net.minecraft.item.ItemStack) {
+        if (heldItem.item !is ItemAppleGold)
+            return
+
+        if (!mc.gameSettings.keyBindUseItem.isKeyDown) {
+            if (!grimEating) {
+                grimEating = true
+                grimLastFoodAmount = 0
+            }
+            return
+        }
+
+        if (grimEating) {
+            if (heldItem.stackSize <= 1)
+                return
+
+            grimLastFoodAmount = heldItem.stackSize
+            val anti = canUseGrimAppleDrop(heldItem)
+            grimFoodSpeed = if (anti) 1f else 0.2f
+
+            if (anti) {
+                sendPacket(C07PacketPlayerDigging(DROP_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN), false)
+                sendPacket(C0FPacketConfirmTransaction(), true)
+            }
+
+            grimEating = false
+        }
+
+        if (!grimEating && player.heldItem?.stackSize != grimLastFoodAmount) {
+            grimFoodSpeed = 0.2f
+            grimEating = true
+        }
+    }
+
+    private fun handleGrimConsumePacket(event: PacketEvent, packet: Packet<*>, player: net.minecraft.client.entity.EntityPlayerSP) {
+        val heldItem = player.heldItem ?: return
+
+        if (player.isUsingItem && heldItem.item is ItemAppleGold && mc.gameSettings.keyBindUseItem.isKeyDown &&
+            packet is C07PacketPlayerDigging && packet.status == DROP_ITEM
+        ) {
+            event.cancelEvent()
+            return
+        }
+
+        if (event.eventType != EventState.RECEIVE || packet !is S2FPacketSetSlot || heldItem.item !is ItemAppleGold)
+            return
+
+        if (canUseGrimAppleDrop(heldItem)) {
+            event.cancelEvent()
+        }
+    }
+
+    private fun canUseGrimAppleDrop(heldItem: net.minecraft.item.ItemStack): Boolean {
+        if (heldItem.stackSize <= 1)
+            return false
+
+        val movingObjectPosition = mc.objectMouseOver ?: return true
+        if (movingObjectPosition.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK)
+            return true
+
+        val world = mc.theWorld ?: return true
+        val block = world.getBlockState(movingObjectPosition.blockPos).block
+        return heldItem.item !is ItemFood || !isInteractBlock(block)
+    }
+
+    private fun isUsingConsumable(): Boolean {
+        val heldItem = mc.thePlayer?.heldItem?.item ?: return false
+        return mc.thePlayer.isUsingItem && isConsumable(heldItem)
+    }
+
+    private fun isConsumable(item: Item) =
+        item is ItemFood || item is ItemBucketMilk || item is ItemPotion && !ItemPotion.isSplash(mc.thePlayer.heldItem.metadata)
+
+    private fun isInteractBlock(block: Block) =
+        block is BlockFence ||
+            block is BlockFenceGate ||
+            block is BlockDoor ||
+            block is BlockChest ||
+            block is BlockEnderChest ||
+            block is BlockEnchantmentTable ||
+            block is BlockFurnace ||
+            block is BlockAnvil ||
+            block is BlockBed ||
+            block is BlockWorkbench ||
+            block is BlockNote ||
+            block is BlockTrapDoor ||
+            block is BlockHopper ||
+            block is BlockDispenser ||
+            block is BlockDaylightDetector ||
+            block is BlockRedstoneRepeater ||
+            block is BlockRedstoneComparator ||
+            block is BlockButton ||
+            block is BlockBeacon ||
+            block is BlockBrewingStand ||
+            block is BlockSign
 
     fun isUNCPBlocking() =
         swordMode == "UpdatedNCP" && mc.gameSettings.keyBindUseItem.isKeyDown && (mc.thePlayer.heldItem?.item is ItemSword)
