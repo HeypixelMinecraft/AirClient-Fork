@@ -20,8 +20,6 @@ import net.ccbluex.liquidbounce.features.module.ModuleManager
 import net.ccbluex.liquidbounce.features.module.ModuleManager.registerModules
 import net.ccbluex.liquidbounce.features.special.BungeeCordSpoof
 import net.ccbluex.liquidbounce.features.special.ClientFixes
-import net.ccbluex.liquidbounce.features.special.ClientRichPresence
-import net.ccbluex.liquidbounce.features.special.ClientRichPresence.showRPCValue
 import net.ccbluex.liquidbounce.file.FileManager
 import net.ccbluex.liquidbounce.file.FileManager.loadAllConfigs
 import net.ccbluex.liquidbounce.file.FileManager.saveAllConfigs
@@ -126,8 +124,6 @@ object LiquidBounce {
         }
     }
 
-    // Discord RPC
-    val clientRichPresence = ClientRichPresence
 
     /**
      * Start IO tasks
@@ -244,16 +240,6 @@ object LiquidBounce {
             // Initialize InputFix
             net.ccbluex.liquidbounce.utils.inputfix.InputFixInit.init()
 
-            // Setup Discord RPC
-            if (showRPCValue) {
-                SharedScopes.IO.launch {
-                    try {
-                        clientRichPresence.setup()
-                    } catch (throwable: Throwable) {
-                        LOGGER.error("Failed to setup Discord RPC.", throwable)
-                    }
-                }
-            }
 
             // Login into known token if not empty
             if (CapeService.knownToken.isNotBlank()) {
