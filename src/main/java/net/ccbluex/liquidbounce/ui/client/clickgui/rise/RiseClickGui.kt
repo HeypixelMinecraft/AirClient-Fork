@@ -28,6 +28,7 @@ import org.lwjgl.input.Mouse
 import org.lwjgl.opengl.GL11
 import java.awt.Color
 import java.io.IOException
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class RiseClickGui : GuiScreen() {
@@ -54,6 +55,9 @@ class RiseClickGui : GuiScreen() {
     private var draggingNumber: Value<*>? = null
     private var valuesDirty = false
     private var modulesDirty = false
+    private var openProgress = 0f
+    private var sidebarSelectorY = 0f
+    private val expansionAnimations = HashMap<Module, Float>()
 
     private val background = Color(23, 26, 33, 254)
     private val sidebar = Color(18, 20, 25, 255)
@@ -69,6 +73,8 @@ class RiseClickGui : GuiScreen() {
             x = width / 2f - w / 2f
             y = height / 2f - h / 2f
         }
+        openProgress = 0f
+        sidebarSelectorY = selectedCategoryY()
         super.initGui()
     }
 
@@ -90,12 +96,20 @@ class RiseClickGui : GuiScreen() {
         }
 
         handleWheel(mouseX, mouseY)
+        openProgress = animate(openProgress, 1f, 0.18f)
+        val scale = 0.92f + 0.08f * easeOut(openProgress)
+
+        GL11.glPushMatrix()
+        GL11.glTranslatef(x + w / 2f, y + h / 2f, 0f)
+        GL11.glScalef(scale, scale, 1f)
+        GL11.glTranslatef(-(x + w / 2f), -(y + h / 2f), 0f)
         drawShadow()
         RoundedUtil.drawRound(x, y, w, h, 12f, background)
         startScissor(x + 1f, y + 1f, w - 2f, h - 2f)
         drawSidebar(mouseX, mouseY)
         drawContent(mouseX, mouseY)
         endScissor()
+        GL11.glPopMatrix()
 
         super.drawScreen(mouseX, mouseY, partialTicks)
     }
@@ -202,20 +216,24 @@ class RiseClickGui : GuiScreen() {
         }
 
         Fonts.fontRise50.drawString("Rise", x + 14f, y + 13f, text.rgb)
-        Fonts.fontRise35.drawString("AirClient", x + 56f, y + 19f, Color(accent.red, accent.green, accent.blue, 205).rgb)
+
+        sidebarSelectorY = animate(sidebarSelectorY, selectedCategoryY(), 0.22f)
+        val selectedLabel = selectedCategory.displayName
+        val selectedPillW = (Fonts.fontRise35.getStringWidth(selectedLabel) + 30f).coerceAtMost(sidebarW - 16f)
+        RoundedUtil.drawRound(x + 9f, sidebarSelectorY - 4f, selectedPillW, 17f, 5f, Color(accent.red, accent.green, accent.blue, 105))
 
         var cy = y + 50f
         Category.entries.forEach { category ->
             val selected = category == selectedCategory
             val hovered = isHovered(x + 10f, cy - 2f, sidebarW - 18f, 18f, mouseX, mouseY)
             val label = category.displayName
-            val icon = label.take(1).uppercase()
+            val icon = category.riseIcon()
             val labelX = x + 33f
-            if (selected || hovered) {
+            if (hovered && !selected) {
                 val pillW = Fonts.fontRise35.getStringWidth(label) + 30f
-                RoundedUtil.drawRound(x + 9f, cy - 4f, pillW.coerceAtMost(sidebarW - 16f), 17f, 5f, if (selected) Color(accent.red, accent.green, accent.blue, 105) else Color(255, 255, 255, 18))
+                RoundedUtil.drawRound(x + 9f, cy - 4f, pillW.coerceAtMost(sidebarW - 16f), 17f, 5f, Color(255, 255, 255, 18))
             }
-            Fonts.fontRise35.drawString(icon, x + 17f, cy + 1f, if (selected) Color.WHITE.rgb else Color(255, 255, 255, 200).rgb)
+            Fonts.fontRiseIcon35.drawString(icon, x + 17f, cy + 1f, if (selected) Color.WHITE.rgb else Color(255, 255, 255, 200).rgb)
             Fonts.fontRise35.drawString(label, labelX, cy + 1f, if (selected) Color.WHITE.rgb else Color(255, 255, 255, 200).rgb)
             cy += 21f
         }
@@ -246,6 +264,7 @@ class RiseClickGui : GuiScreen() {
 
     private fun drawModule(mx: Float, my: Float, module: Module, mouseX: Int, mouseY: Int) {
         val expanded = module in expandedModules
+        val expansion = updateExpansion(module)
         val cardH = moduleHeight(module)
         if (my + cardH < y + 42f || my > y + h - 7f) return
 
@@ -254,14 +273,17 @@ class RiseClickGui : GuiScreen() {
         Fonts.fontRise40.drawString(if (bindingModule == module) "Press key..." else module.name, mx + 8f, my + 8f, if (module.state) accent.rgb else text.rgb)
         Fonts.fontRise35.drawString(module.category.displayName, mx + 8f, my + 25f, Color(255, 255, 255, 70).rgb)
         if (module.values.any { it.shouldRender() }) {
-            Fonts.fontRise35.drawString(if (expanded) "-" else "+", mx + moduleW - 15f, my + 13f, muted.rgb)
+            val symbol = if (expanded) "-" else "+"
+            Fonts.fontRise35.drawString(symbol, mx + moduleW - 15f, my + 13f + (1f - expansion) * 2f, muted.rgb)
         }
 
-        if (!expanded) return
+        if (expansion <= 0.02f) return
 
         var vy = my + moduleBaseH + 2f
         module.values.filter { it.shouldRender() }.forEach { value ->
-            drawValue(mx + 8f, vy, moduleW - 16f, value, mouseX, mouseY)
+            if (vy + valueHeight(value) <= my + cardH) {
+                drawValue(mx + 8f, vy, moduleW - 16f, value, mouseX, mouseY)
+            }
             vy += valueHeight(value)
         }
     }
@@ -459,8 +481,11 @@ class RiseClickGui : GuiScreen() {
 
     private fun filteredHeight() = filteredModules().sumOf { (moduleHeight(it) + 7f).toDouble() }.toFloat()
 
-    private fun moduleHeight(module: Module) =
-        moduleBaseH + if (module in expandedModules) module.values.filter { it.shouldRender() }.sumOf { valueHeight(it).toDouble() }.toFloat() + 4f else 0f
+    private fun moduleHeight(module: Module): Float {
+        val extraHeight = module.values.filter { it.shouldRender() }.sumOf { valueHeight(it).toDouble() }.toFloat()
+        val expansion = expansionAnimations[module] ?: if (module in expandedModules) 1f else 0f
+        return moduleBaseH + (extraHeight + 4f) * expansion
+    }
 
     private fun valueHeight(value: Value<*>) = when (value) {
         is IntValue, is FloatValue -> 30f
@@ -497,6 +522,32 @@ class RiseClickGui : GuiScreen() {
         RenderUtils.drawFilledCircle(cx + radius / 2f, cy + radius / 2f, radius / 2f, color)
     }
 
+    private fun selectedCategoryY(): Float {
+        return y + 50f + Category.entries.indexOf(selectedCategory).coerceAtLeast(0) * 21f
+    }
+
+    private fun updateExpansion(module: Module): Float {
+        val current = expansionAnimations[module] ?: if (module in expandedModules) 1f else 0f
+        val target = if (module in expandedModules) 1f else 0f
+        val next = animate(current, target, 0.24f)
+        if (next <= 0.01f && target == 0f) {
+            expansionAnimations.remove(module)
+        } else {
+            expansionAnimations[module] = next
+        }
+        return next
+    }
+
+    private fun animate(current: Float, target: Float, speed: Float): Float {
+        if (abs(target - current) < 0.01f) return target
+        return current + (target - current) * speed
+    }
+
+    private fun easeOut(value: Float): Float {
+        val clamped = value.coerceIn(0f, 1f)
+        return 1f - (1f - clamped) * (1f - clamped)
+    }
+
     private fun startScissor(sx: Float, sy: Float, sw: Float, sh: Float) {
         val sr = ScaledResolution(mc)
         val factor = sr.scaleFactor
@@ -520,4 +571,17 @@ class RiseClickGui : GuiScreen() {
 
     private fun isHovered(hx: Float, hy: Float, hw: Float, hh: Float, mouseX: Int, mouseY: Int) =
         mouseX >= hx && mouseX <= hx + hw && mouseY >= hy && mouseY <= hy + hh
+
+    private fun Category.riseIcon() = when (this) {
+        Category.COMBAT -> "a"
+        Category.MOVEMENT -> "b"
+        Category.PLAYER -> "c"
+        Category.RENDER -> "g"
+        Category.WORLD -> "g"
+        Category.MISC -> "e"
+        Category.EXPLOIT -> "a"
+        Category.FUN -> "f"
+        Category.CLIENT -> "e"
+        Category.MUSIC -> "f"
+    }
 }
