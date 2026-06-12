@@ -15,6 +15,7 @@ import net.ccbluex.liquidbounce.ui.client.clickgui.augustus.AugustusClickGui
 import net.ccbluex.liquidbounce.ui.client.clickgui.moonlight.MoonLightClickGui
 import net.ccbluex.liquidbounce.ui.client.clickgui.neverlose.NeverloseScreen
 import net.ccbluex.liquidbounce.ui.client.clickgui.opai.OpaiScreen
+import net.ccbluex.liquidbounce.ui.client.clickgui.rise.RiseClickGui
 import net.ccbluex.liquidbounce.ui.client.clickgui.skeet.SkeetClickGui
 import net.ccbluex.liquidbounce.ui.client.clickgui.style.styles.BlackStyle
 import net.ccbluex.liquidbounce.ui.client.clickgui.style.styles.GlassStyle
@@ -30,7 +31,7 @@ import java.awt.Color
 object ClickGUI : Module("ClickGUI", Category.CLIENT, Keyboard.KEY_RSHIFT, canBeEnabled = false) {
     private val style by choices(
         "Style",
-        arrayOf("LiquidBounce", "Null", "Slowly", "Black", "Neon", "Minimal", "Glass", "Neverlose", "Augustus", "Opai", "Skeet", "Astolfo", "MoonLight"),
+        arrayOf("LiquidBounce", "Null", "Slowly", "Black", "Neon", "Minimal", "Glass", "Neverlose", "Augustus", "Opai", "Skeet", "Astolfo", "MoonLight", "Rise"),
         "LiquidBounce"
     ).onChanged {
         updateStyle()
@@ -42,7 +43,7 @@ object ClickGUI : Module("ClickGUI", Category.CLIENT, Keyboard.KEY_RSHIFT, canBe
     val spacedModules by boolean("SpacedModules", false)
     val panelsForcedInBoundaries by boolean("PanelsForcedInBoundaries", false)
 
-    private val color by color("Color", Color(0, 160, 255)) { style !in arrayOf("Slowly", "Black", "Neverlose", "Augustus", "Opai", "Skeet", "Astolfo", "MoonLight") }
+    private val color by color("Color", Color(0, 160, 255)) { style !in arrayOf("Slowly", "Black", "Neverlose", "Augustus", "Opai", "Skeet", "Astolfo", "MoonLight", "Rise") }
 
     val guiColor
         get() = color.rgb
@@ -60,6 +61,7 @@ object ClickGUI : Module("ClickGUI", Category.CLIENT, Keyboard.KEY_RSHIFT, canBe
             "Skeet" -> mc.displayGuiScreen(SkeetClickGui())
             "Astolfo" -> mc.displayGuiScreen(AstolfoClickGui())
             "MoonLight" -> mc.displayGuiScreen(MoonLightClickGui())
+            "Rise" -> mc.displayGuiScreen(RiseClickGui())
             else -> {
                 updateStyle()
                 mc.displayGuiScreen(clickGui)
