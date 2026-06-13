@@ -105,6 +105,7 @@ object Speed : Module("Speed", Category.MOVEMENT, Keyboard.KEY_X) {
         GroundStrafeHop,
         StrafeHop,
         VanillaHop,
+        FairFightSpeed,
         MoraLowHop,
         SlowHop,
         Legit,
