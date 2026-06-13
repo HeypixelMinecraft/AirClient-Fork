@@ -131,7 +131,6 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             ForceUnicodeChat,
             FreeCam,
             Freeze,
-            NoC03,
             Fucker,
             Fullbright,
             GameDetector,
@@ -275,6 +274,8 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             BlockBreakFX,
             BlockPlaceFX,
             FireballTrajectory,
+            net.ccbluex.liquidbounce.ui.client.clickgui.opai.OpaiGUI,
+            AutoBlock,
             AntiKnockBack
         )
 

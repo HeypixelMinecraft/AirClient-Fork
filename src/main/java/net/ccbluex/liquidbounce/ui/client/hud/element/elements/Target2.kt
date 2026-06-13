@@ -142,7 +142,10 @@ class Target2 : Element("Target2") {
         val currentStyleName = styleValue.get()
         val mainStyle = styleList.find { it.name.equals(currentStyleName, ignoreCase = true) } ?: return Border(0F, 0F, 120F, 48F)
 
-        if (mainTarget == null) {
+        val hasTarget = mainTarget != null
+        
+        if (!hasTarget) {
+            lastHasTarget = false
             return Border(0F, 0F, 120F, 48F)
         }
 
@@ -163,9 +166,8 @@ class Target2 : Element("Target2") {
 
         val returnBorder = mainStyle.getBorder(convertTarget) ?: return Border(0F, 0F, 120F, 48F)
 
-        val hasTarget = mainTarget != null
-        val targetScale = if (hasTarget) 1F else 0F
-        val targetAlpha = if (hasTarget) 1F else 0F
+        val targetScale = 1F
+        val targetAlpha = 1F
         
         if (hasTarget && !lastHasTarget) {
             animScale = 0F

@@ -157,6 +157,13 @@ processResources {
     }
 
     rename "(.+_at.cfg)", "META-INF/\$1"
+    
+    doLast {
+        def versionFile = file("${buildDir}/resources/main/airclient.properties")
+        versionFile.text = """version=${project.version}
+mcversion=${project.minecraft.version}
+"""
+    }
 }
 
 task moveResources {

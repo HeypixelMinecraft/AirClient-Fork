@@ -1,6 +1,7 @@
 package net.ccbluex.liquidbounce.features.module.modules.combat
 
 import net.ccbluex.liquidbounce.event.PacketEvent
+import net.ccbluex.liquidbounce.event.UpdateEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
@@ -33,23 +34,24 @@ object BlockNotify : Module("BlockNotify", Category.COMBAT) {
         if (checkMode != "Packet") return@handler
         
         val packet = event.packet
-        
         if (packet is S19PacketEntityStatus) {
-            val entityStatus = packet.opCode
-            
-            if (entityStatus == 29.toByte()) {
-                val entity = packet.getEntity(mc.theWorld)
+            val entity = packet.getEntity(mc.theWorld)
+            if (entity is EntityPlayer) {
+                if (onlySelf && entity != mc.thePlayer) return@handler
                 
-                if (entity is EntityPlayer) {
-                    if (onlySelf && entity != mc.thePlayer) return@handler
-                    
-                    onBlockSuccess(entity)
+                val opCode = packet.opCode.toInt() and 0xFF
+                if (opCode == 2) {
+                    val isBlocking = entity.isBlocking || 
+                        (entity == mc.thePlayer && KillAura.blockStatus)
+                    if (isBlocking) {
+                        onBlockSuccess(entity)
+                    }
                 }
             }
         }
     }
 
-    val onUpdate = handler<net.ccbluex.liquidbounce.event.UpdateEvent> {
+    val onUpdate = handler<UpdateEvent> {
         if (checkMode != "HurtTime") return@handler
         
         val player = mc.thePlayer ?: return@handler

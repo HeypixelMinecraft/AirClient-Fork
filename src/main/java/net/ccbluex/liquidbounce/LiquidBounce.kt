@@ -77,10 +77,28 @@ object LiquidBounce {
 
     const val MINECRAFT_VERSION = "1.8.9"
     
-    val clientVersionText = "1.0"
-    val clientVersionNumber = 100
-    val clientCommit = "unknown"
-    val clientBranch = "unknown"
+    val clientVersionText: String
+    val clientVersionNumber: Int
+    val clientCommit: String
+    val clientBranch: String
+
+    init {
+        val props = java.util.Properties()
+        try {
+            val stream = javaClass.classLoader.getResourceAsStream("airclient.properties")
+            if (stream != null) {
+                props.load(stream)
+                stream.close()
+            }
+        } catch (e: Exception) {
+            LOGGER.warn("Failed to load version properties: ${e.message}")
+        }
+        
+        clientVersionText = props.getProperty("version", "b1.2")
+        clientVersionNumber = 100
+        clientCommit = props.getProperty("commit", "unknown")
+        clientBranch = props.getProperty("branch", "unknown")
+    }
 
     /**
      * Defines if the client is in development mode.
