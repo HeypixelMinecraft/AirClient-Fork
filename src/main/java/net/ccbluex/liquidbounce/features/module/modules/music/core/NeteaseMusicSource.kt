@@ -56,7 +56,7 @@ object NeteaseMusicSource : MusicSource {
                 url(url)
                     .defaultAgent()
                     .header("Referer", referer)
-                    .header("Cookie", "appver=1.5.2; os=pc")
+//                    .header("Cookie", "appver=1.5.2; os=pc")
                     .get()
             }.execute().use { response ->
                 if (!response.isSuccessful) {
