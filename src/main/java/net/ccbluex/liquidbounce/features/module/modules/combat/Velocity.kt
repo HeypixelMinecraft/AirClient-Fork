@@ -77,7 +77,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
             "AAC4Reduce", "AAC5Reduce", "AAC5.2.0", "AAC5.2.0Combat",
             "Grim", "Grim1.17", "GrimC07", "GrimDamage", "MatrixReverse",
             "MatrixSimple", "HypixelBoost", "Minemen", "Phase", "SideStrafe",
-            "Spoof", "Tick"
+            "Spoof", "Tick", "FairFight"
         ), "Simple"
     )
 
@@ -247,6 +247,11 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val sideStrafeSetMotion by boolean("SideStrafeStrafe", false) { mode == "SideStrafe" }
     private val sideStrafeFace by boolean("SideStrafeFace", true) { mode == "SideStrafe" }
     private val sideStrafeRotationSettings = RotationSettings(this) { mode == "SideStrafe" && sideStrafeFace }.withoutKeepRotation()
+
+    // FairFight
+    private val fairFightHorizontal by float("FairFight-Horizontal", 0.92F, 0.75F..1F) { mode == "FairFight" }
+    private val fairFightVertical by float("FairFight-Vertical", 1F, 0.85F..1F) { mode == "FairFight" }
+    private val fairFightJitter by float("FairFight-Jitter", 0.035F, 0F..0.1F) { mode == "FairFight" }
 
     /**
      * VALUES
@@ -788,7 +793,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         val fdpRawVelocityMode = mode in arrayOf(
             "AAC4Reduce", "AAC5Reduce", "AAC5.2.0", "AAC5.2.0Combat",
             "Grim", "Grim1.17", "GrimC07", "MatrixReverse", "MatrixSimple",
-            "Minemen", "Phase", "SideStrafe", "Spoof", "Tick"
+            "Minemen", "Phase", "SideStrafe", "Spoof", "Tick", "FairFight"
         )
 
         if ((packet is S12PacketEntityVelocity && thePlayer.entityId == packet.entityID &&
@@ -927,6 +932,8 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                         sideStrafePos = BlockPos(thePlayer.posX, thePlayer.posY, thePlayer.posZ)
                     }
                 }
+
+                "fairfight" -> handleFairFightPacket(packet, thePlayer)
 
                 "spoof" -> {
                     if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
@@ -1568,6 +1575,28 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         } else {
             player.jump()
             minemenLastCancel = false
+        }
+    }
+
+    private fun handleFairFightPacket(packet: Packet<*>, player: EntityPlayerSP) {
+        val jitter = if (fairFightJitter > 0F) Random.nextFloat() * fairFightJitter - fairFightJitter * 0.5F else 0F
+        val horizontalFactor = (fairFightHorizontal + jitter).coerceIn(0.75F, 1F)
+
+        when (packet) {
+            is S12PacketEntityVelocity -> {
+                if (packet.entityID != player.entityId)
+                    return
+
+                packet.motionX = (packet.motionX * horizontalFactor).toInt()
+                packet.motionY = (packet.motionY * fairFightVertical).toInt()
+                packet.motionZ = (packet.motionZ * horizontalFactor).toInt()
+            }
+
+            is S27PacketExplosion -> {
+                packet.field_149152_f *= horizontalFactor
+                packet.field_149153_g *= fairFightVertical
+                packet.field_149159_h *= horizontalFactor
+            }
         }
     }
 
