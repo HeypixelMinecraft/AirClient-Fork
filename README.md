@@ -116,7 +116,7 @@ gradlew setupDevWorkspace build
 - [x] 200+ 主题颜色系统 / 200+ theme color system
 - [x] 本地音乐播放器功能 / Local music player functionality
 - [x] 灵动岛歌词显示 / Dynamic Island with lyrics
-- [ ] 更多音乐平台支持 / More music platform support
+- [x] 更多音乐平台支持 / More music platform support（网易云音乐：搜索 / 在线播放 / 在线歌词，`.music` 命令）
 - [ ] 云配置 / Cloud config
 - [ ] 多语言完整支持 / Full multi-language support
 

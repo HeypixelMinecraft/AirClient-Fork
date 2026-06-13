@@ -112,7 +112,7 @@ class NeverloseScreen : GuiScreen() {
             "Combat" to listOf(Category.COMBAT, Category.PLAYER),
             "Common" to listOf(Category.MOVEMENT, Category.WORLD, Category.MISC, Category.EXPLOIT),
             "Visuals" to listOf(Category.RENDER, Category.FUN),
-            "Presets" to listOf(Category.CLIENT, Category.MUSIC)
+            "Presets" to listOf(Category.CLIENT)
         )
 
         var y = posY + 42
@@ -318,7 +318,7 @@ class NeverloseScreen : GuiScreen() {
             listOf(Category.COMBAT, Category.PLAYER),
             listOf(Category.MOVEMENT, Category.WORLD, Category.MISC, Category.EXPLOIT),
             listOf(Category.RENDER, Category.FUN),
-            listOf(Category.CLIENT, Category.MUSIC)
+            listOf(Category.CLIENT)
         )
 
         var y = posY + 60
@@ -666,7 +666,6 @@ class NeverloseScreen : GuiScreen() {
         Category.EXPLOIT -> "◎"
         Category.FUN -> "★"
         Category.CLIENT -> "⚙"
-        Category.MUSIC -> "♫"
     }
 
     private fun isHovered(x: Int, y: Int, width: Int, height: Int, mouseX: Int, mouseY: Int): Boolean {

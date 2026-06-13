@@ -19,8 +19,6 @@ import net.ccbluex.liquidbounce.features.module.modules.`fun`.Myopia
 import net.ccbluex.liquidbounce.features.module.modules.misc.*
 import net.ccbluex.liquidbounce.features.module.modules.movement.*
 import net.ccbluex.liquidbounce.features.module.modules.music.MusicPlayer
-import net.ccbluex.liquidbounce.features.module.modules.music.NextTrack
-import net.ccbluex.liquidbounce.features.module.modules.music.PreviousTrack
 import net.ccbluex.liquidbounce.features.module.modules.client.*
 import net.ccbluex.liquidbounce.features.module.modules.player.*
 import net.ccbluex.liquidbounce.features.module.modules.render.*
@@ -259,8 +257,6 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             AutoL,
             FullDisabler,
             MusicPlayer,
-            NextTrack,
-            PreviousTrack,
             MoveFix,
             SkyBlockPerformanceMode,
             DamageParticle,

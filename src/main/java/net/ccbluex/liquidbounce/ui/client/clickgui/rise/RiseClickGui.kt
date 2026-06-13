@@ -582,6 +582,5 @@ class RiseClickGui : GuiScreen() {
         Category.EXPLOIT -> "a"
         Category.FUN -> "f"
         Category.CLIENT -> "e"
-        Category.MUSIC -> "f"
     }
 }
