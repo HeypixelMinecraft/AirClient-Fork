@@ -31,6 +31,15 @@ class PlaybackEngine {
     @Volatile
     private var volume = 0.5F
 
+    /**
+     * Bumped on every [stop]. A playback thread only fires its callbacks while
+     * its captured generation is still current, so a thread that was stopped or
+     * superseded (e.g. when switching tracks) stays silent instead of reporting
+     * a spurious error/completion.
+     */
+    @Volatile
+    private var generation = 0
+
     val isPlaying: Boolean
         get() = playing && player != null
 
@@ -48,6 +57,7 @@ class PlaybackEngine {
     ) {
         stop()
 
+        val myGeneration = generation
         playing = true
         playThread = thread(start = true, name = "MusicPlayer-Thread") {
             try {
@@ -61,15 +71,19 @@ class PlaybackEngine {
 
                 currentPlayer.play()
 
-                if (playing && currentPlayer.isComplete) {
+                if (myGeneration == generation && playing && currentPlayer.isComplete) {
                     onComplete()
                 }
             } catch (e: InterruptedException) {
                 // stop() interrupted us, nothing to report
             } catch (e: Exception) {
-                ClientUtils.LOGGER.error("[MusicPlayer] 播放失败: ${e.message}")
-                playing = false
-                onError(e.message ?: "unknown error")
+                // Only report if this thread is still the active playback (not a
+                // deliberate stop / track switch).
+                if (myGeneration == generation) {
+                    ClientUtils.LOGGER.error("[MusicPlayer] 播放失败: ${e.message}")
+                    playing = false
+                    onError(e.message ?: "unknown error")
+                }
             } finally {
                 try {
                     stream.close()
@@ -81,6 +95,7 @@ class PlaybackEngine {
 
     fun stop() {
         playing = false
+        generation++
         try {
             player?.close()
         } catch (ignored: Exception) {

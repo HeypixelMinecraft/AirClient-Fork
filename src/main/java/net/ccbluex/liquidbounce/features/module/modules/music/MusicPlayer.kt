@@ -17,6 +17,8 @@ import net.ccbluex.liquidbounce.features.module.modules.music.core.PlaybackEngin
 import net.ccbluex.liquidbounce.features.module.modules.music.core.Track
 import net.ccbluex.liquidbounce.features.module.modules.music.core.TrackSource
 import net.ccbluex.liquidbounce.utils.client.chat
+import net.ccbluex.liquidbounce.utils.kotlin.SharedScopes
+import kotlinx.coroutines.launch
 
 /**
  * Music player orchestration layer.
@@ -207,8 +209,8 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
 
     /**
      * Play [track] immediately. Adds it to the queue if not already present.
-     * Performs source I/O (possibly network) on the calling thread, so online
-     * tracks should be played from a background coroutine.
+     * The actual stream opening / lyric loading runs on a background IO
+     * coroutine, so this is safe to call from any thread.
      */
     fun playTrack(track: Track) {
         val idx = queue.indexOf(track)
@@ -218,7 +220,20 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
             queue.add(track)
             currentIndex = queue.size - 1
         }
-        startPlayback(track)
+        dispatchPlayback(track)
+    }
+
+    /**
+     * Start playback of [track] on the shared IO pool.
+     *
+     * Crucially this must run off both the render thread (network I/O would
+     * freeze the game) and off the previous [PlaybackEngine] thread: the first
+     * thing [startPlayback] does is [PlaybackEngine.stop], which interrupts the
+     * previous playback thread. If the next track's network requests ran on that
+     * same interrupted thread they would fail immediately with "interrupted".
+     */
+    private fun dispatchPlayback(track: Track) {
+        SharedScopes.IO.launch { startPlayback(track) }
     }
 
     /**
@@ -285,7 +300,7 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
 
     private fun onMusicComplete() {
         when (loopMode) {
-            "单曲循环" -> currentTrack?.let { startPlayback(it) }
+            "单曲循环" -> currentTrack?.let { dispatchPlayback(it) }
             "列表循环" -> playNext()
             "关闭" -> { /* stop, nothing else */ }
         }
@@ -302,13 +317,13 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
     fun playNext() {
         if (queue.isEmpty()) return
         currentIndex = (currentIndex + 1) % queue.size
-        startPlayback(queue[currentIndex])
+        dispatchPlayback(queue[currentIndex])
     }
 
     fun playPrevious() {
         if (queue.isEmpty()) return
         currentIndex = (currentIndex - 1 + queue.size) % queue.size
-        startPlayback(queue[currentIndex])
+        dispatchPlayback(queue[currentIndex])
     }
 
     /**
@@ -320,7 +335,7 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
         queue.clear()
         queue.addAll(localTracks)
         currentIndex = index
-        startPlayback(queue[index])
+        dispatchPlayback(queue[index])
     }
 
     /**
