@@ -69,7 +69,7 @@ object Fly : Module("Fly", Category.MOVEMENT, Keyboard.KEY_P) {
         Verus, VerusGlide,
 
         // Other anti-cheats
-        FairFightFly, MineSecure, HawkEye, HAC, WatchCat,
+        MineSecure, HawkEye, HAC, WatchCat,
 
         // Other
         Jetpack, KeepAlive, Collide, Jump, Flag, Fireball

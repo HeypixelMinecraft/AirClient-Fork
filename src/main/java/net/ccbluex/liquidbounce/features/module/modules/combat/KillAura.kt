@@ -138,14 +138,6 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     // Bypass
     private val swing by boolean("Swing", true)
     private val keepSprint by boolean("KeepSprint", true)
-    private val fairFightCombat by boolean("FairFightCombat", false)
-    private val fairFightCps by intRange("FairFightCPS", 7..10, 1..20) { fairFightCombat }.onChanged {
-        attackDelay = randomClickDelay(it.first, it.last)
-    }
-    private val fairFightHurtTime by int("FairFightHurtTime", 6, 0..10) { fairFightCombat }
-    private val fairFightMaxClicks by int("FairFightMaxClicksPerTick", 1, 1..3) { fairFightCombat }
-    private val fairFightRequireHittable by boolean("FairFightRequireHittable", true) { fairFightCombat }
-    private val fairFightNoAutoBlock by boolean("FairFightNoAutoBlock", true) { fairFightCombat }
 
     // Settings
     private val autoF5 by boolean("AutoF5", false)
@@ -635,9 +627,6 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
             } else 0
 
             var maxClicks = clicks + extraClicks + generatedClicks
-            if (fairFightCombat) {
-                maxClicks = maxClicks.coerceAtMost(fairFightMaxClicks)
-            }
 
             val prevHittable = hittable
 
@@ -694,11 +683,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
             if (cps.last > 0) clicks++
             attackTimer.reset()
 
-            attackDelay = if (fairFightCombat) {
-                randomClickDelay(fairFightCps.first, fairFightCps.last)
-            } else {
-                randomClickDelay(cps.first, cps.last)
-            }
+            attackDelay = randomClickDelay(cps.first, cps.last)
         }
 
         val hittableColor = if (hittable) Color(37, 126, 255, 70) else Color(255, 0, 0, 70)
@@ -751,15 +736,10 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
         }
 
         // Settings
-        val multi = targetMode == "Multi" && !fairFightCombat
+        val multi = targetMode == "Multi"
         val manipulateInventory = simulateClosingInventory && !noInventoryAttack && serverOpenInventory
 
-        val maxHurtTime = if (fairFightCombat) fairFightHurtTime else hurtTime
-        if (hittable && currentTarget.hurtTime > maxHurtTime) {
-            return
-        }
-
-        if (fairFightCombat && fairFightRequireHittable && !hittable) {
+        if (hittable && currentTarget.hurtTime > hurtTime) {
             return
         }
 
@@ -1001,17 +981,13 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
             }
         }
 
-        if (fairFightCombat && fairFightNoAutoBlock && blockStatus) {
-            stopBlocking(true)
-        }
-
         // The function is only called when we are facing an entity
         if (shouldDelayClick(MovingObjectPosition.MovingObjectType.ENTITY)) {
             return
         }
 
         if (!blinkAutoBlock || !BlinkUtils.isBlinking) {
-            val affectSprint = if (fairFightCombat) null else false.takeIf { KeepSprint.handleEvents() || keepSprint }
+            val affectSprint = false.takeIf { KeepSprint.handleEvents() || keepSprint }
 
             thePlayer.attackEntityWithModifiedSprint(entity, affectSprint) {
                 val noSwingActive = NoSwing.handleEvents()
@@ -1039,7 +1015,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
         }
 
         // Start blocking after attack
-        if (!fairFightNoAutoBlock && autoBlock != "Off" && (thePlayer.isBlocking || canBlock) && (!blinkAutoBlock && isLastClick || blinkAutoBlock && (!blinked || !BlinkUtils.isBlinking))) {
+        if (autoBlock != "Off" && (thePlayer.isBlocking || canBlock) && (!blinkAutoBlock && isLastClick || blinkAutoBlock && (!blinked || !BlinkUtils.isBlinking))) {
             startBlocking(entity, interactAutoBlock, autoBlock == "Fake")
         }
 
