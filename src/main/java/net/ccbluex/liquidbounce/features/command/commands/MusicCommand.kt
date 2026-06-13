@@ -62,18 +62,40 @@ object MusicCommand : Command("music", "mu") {
             }
             chat("§a搜索结果（共 ${results.size} 首）:")
             results.forEachIndexed { index, track ->
-                chat("§3${index + 1}. §f${track.artist} - ${track.title}")
+                val id = track.neteaseId ?: 0L
+                chat("§3${index + 1}. §f${track.artist} - ${track.title} §7(ID: $id)")
             }
-            chat("§7使用 §f.music play <序号> §7播放，§f.music add <序号> §7加入队列")
+            chat("§7使用 §f.music play <序号|歌曲ID> §7播放，§f.music add <序号|歌曲ID> §7加入队列")
         }
     }
 
     private fun handlePlay(args: Array<String>) {
-        val index = parseIndex(args) ?: return
-        val track = lastSearch.getOrNull(index) ?: run {
-            chat("§c无效序号，请先 §f.music search")
-            return
+        when (val target = resolveTarget(args, "play") ?: return) {
+            is TrackTarget.Search -> playTrackAsync(target.track)
+            is TrackTarget.NeteaseId -> playByIdAsync(target.id)
         }
+    }
+
+    private fun handleAdd(args: Array<String>) {
+        when (val target = resolveTarget(args, "add") ?: return) {
+            is TrackTarget.Search -> {
+                val position = MusicPlayer.enqueue(target.track)
+                chat("§a已加入队列 (#$position): §f${target.track.displayName}")
+            }
+            is TrackTarget.NeteaseId -> {
+                SharedScopes.IO.launch {
+                    val track = MusicPlayer.fetchNeteaseTrack(target.id) ?: run {
+                        chat("§c无法获取歌曲信息 (ID: ${target.id})")
+                        return@launch
+                    }
+                    val position = MusicPlayer.enqueue(track)
+                    chat("§a已加入队列 (#$position): §f${track.displayName}")
+                }
+            }
+        }
+    }
+
+    private fun playTrackAsync(track: Track) {
         ensureEnabled()
         chat("§7正在加载: §f${track.displayName} §7...")
         SharedScopes.IO.launch {
@@ -81,14 +103,43 @@ object MusicCommand : Command("music", "mu") {
         }
     }
 
-    private fun handleAdd(args: Array<String>) {
-        val index = parseIndex(args) ?: return
-        val track = lastSearch.getOrNull(index) ?: run {
-            chat("§c无效序号，请先 §f.music search")
-            return
+    private fun playByIdAsync(id: Long) {
+        ensureEnabled()
+        chat("§7正在加载歌曲 ID: §f$id §7...")
+        SharedScopes.IO.launch {
+            val track = MusicPlayer.fetchNeteaseTrack(id) ?: run {
+                chat("§c无法获取歌曲信息 (ID: $id)")
+                return@launch
+            }
+            chat("§7正在播放: §f${track.displayName}")
+            MusicPlayer.playTrack(track)
         }
-        val position = MusicPlayer.enqueue(track)
-        chat("§a已加入队列 (#$position): §f${track.displayName}")
+    }
+
+    private sealed class TrackTarget {
+        data class Search(val track: Track) : TrackTarget()
+        data class NeteaseId(val id: Long) : TrackTarget()
+    }
+
+    /**
+     * [arg] is a search result index (1..lastSearch.size) when it falls in that
+     * range; otherwise it is treated as a Netease song id.
+     */
+    private fun resolveTarget(args: Array<String>, subCommand: String): TrackTarget? {
+        if (args.size < 3) {
+            chatSyntax("music $subCommand <序号|歌曲ID>")
+            return null
+        }
+        val number = args[2].toLongOrNull()
+        if (number == null || number <= 0L) {
+            chat("§c无效序号或歌曲 ID")
+            return null
+        }
+        val index = number.toInt()
+        if (lastSearch.isNotEmpty() && index in 1..lastSearch.size) {
+            return TrackTarget.Search(lastSearch[index - 1])
+        }
+        return TrackTarget.NeteaseId(number)
     }
 
     private fun handleQueue() {
@@ -142,26 +193,13 @@ object MusicCommand : Command("music", "mu") {
         chat("§a音量已设为: §f$vol")
     }
 
-    private fun parseIndex(args: Array<String>): Int? {
-        if (args.size < 3) {
-            chatSyntax("music ${args[1].lowercase()} <序号>")
-            return null
-        }
-        val index = args[2].toIntOrNull()?.minus(1)
-        if (index == null || index < 0) {
-            chat("§c无效序号")
-            return null
-        }
-        return index
-    }
-
     private fun printUsage() {
         chat("§3MusicPlayer 命令:")
         chatSyntax(
             arrayOf(
                 "search <关键词>",
-                "play <序号>",
-                "add <序号>",
+                "play <序号|歌曲ID>",
+                "add <序号|歌曲ID>",
                 "queue",
                 "next",
                 "prev",

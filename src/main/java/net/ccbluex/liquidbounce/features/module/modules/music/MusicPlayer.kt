@@ -354,6 +354,14 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
         return NeteaseMusicSource.search(keyword, searchLimit)
     }
 
+    /**
+     * Resolve a Netease track by song id. Network call; run off the render thread.
+     */
+    fun fetchNeteaseTrack(id: Long): Track? {
+        NeteaseMusicSource.domain = neteaseDomain
+        return NeteaseMusicSource.fetchTrack(id)
+    }
+
     private fun updateVolume() {
         engine.setVolume(volumeValue / 100F)
     }

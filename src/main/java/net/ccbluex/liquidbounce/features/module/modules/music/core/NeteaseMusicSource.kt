@@ -109,6 +109,38 @@ object NeteaseMusicSource : MusicSource {
     }
 
     /**
+     * Fetch a single track by Netease song id. Network call; run off the render thread.
+     */
+    fun fetchTrack(id: Long): Track? {
+        val url = "$referer/api/song/detail/?ids=[$id]"
+        val body = requestBody(url) ?: return null
+
+        return try {
+            val root = body.parseJson().asJsonObject
+            val songs = root.getAsJsonArray("songs") ?: return null
+            if (songs.size() == 0) return null
+
+            val song = songs[0].asJsonObject
+            val songId = song.get("id").asLong
+            val name = song.get("name").asString
+            val artist = song.getAsJsonArray("artists")
+                ?.joinToString("/") { it.asJsonObject.get("name").asString }
+                ?: ""
+            val duration = song.get("duration")?.asLong ?: 0L
+            Track(
+                title = name,
+                artist = artist,
+                durationMs = duration,
+                source = TrackSource.NETEASE,
+                neteaseId = songId
+            )
+        } catch (e: Exception) {
+            ClientUtils.LOGGER.warn("[MusicPlayer] 网易云歌曲详情解析失败: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Download the song to a local cache file and play from there, rather than
      * streaming directly. A local file is immune to network stalls/timeouts
      * during decoding, and lets us reuse the file on replay.
