@@ -4,11 +4,15 @@
  */
 package net.ccbluex.liquidbounce.features.module.modules.music.core
 
+import net.ccbluex.liquidbounce.file.FileManager
 import net.ccbluex.liquidbounce.utils.client.ClientUtils
 import net.ccbluex.liquidbounce.utils.io.HttpClient
 import net.ccbluex.liquidbounce.utils.io.defaultAgent
 import net.ccbluex.liquidbounce.utils.io.newCall
 import net.ccbluex.liquidbounce.utils.io.parseJson
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 
 /**
@@ -33,6 +37,18 @@ object NeteaseMusicSource : MusicSource {
 
     private val referer: String
         get() = "https://$domain"
+
+    /**
+     * Cache directory for downloaded songs. Kept separate from the local Music
+     * folder so cached files are not picked up by [LocalMusicSource.scan].
+     */
+    private val cacheDir: File by lazy {
+        val dir = File(FileManager.dir, "MusicCache")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        dir
+    }
 
     private fun requestBody(url: String): String? {
         return try {
@@ -92,31 +108,59 @@ object NeteaseMusicSource : MusicSource {
         }
     }
 
+    /**
+     * Download the song to a local cache file and play from there, rather than
+     * streaming directly. A local file is immune to network stalls/timeouts
+     * during decoding, and lets us reuse the file on replay.
+     */
     override fun openStream(track: Track): InputStream {
         val id = track.neteaseId
             ?: throw IllegalArgumentException("Netease track has no id: ${track.displayName}")
 
+        val cacheFile = File(cacheDir, "netease_$id.mp3")
+        if (!cacheFile.exists() || cacheFile.length() <= 0L) {
+            downloadToCache(id, cacheFile)
+        }
+
+        return BufferedInputStream(FileInputStream(cacheFile))
+    }
+
+    private fun downloadToCache(id: Long, target: File) {
         val url = "$referer/song/media/outer/url?id=$id.mp3"
-        val response = HttpClient.newCall {
+        HttpClient.newCall {
             url(url)
                 .defaultAgent()
                 .header("Referer", referer)
                 .get()
-        }.execute()
+        }.execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("无法获取播放流 (HTTP ${response.code})，可能为 VIP/下架歌曲")
+            }
 
-        if (!response.isSuccessful) {
-            response.close()
-            throw IllegalStateException("无法获取播放流 (HTTP ${response.code})，可能为 VIP/下架歌曲")
+            if (response.body.contentLength() == 0L) {
+                throw IllegalStateException("歌曲不可播放（VIP/下架/无版权）")
+            }
+
+            val tempFile = File(target.parentFile, "${target.name}.part")
+            try {
+                tempFile.outputStream().use { out ->
+                    response.body.byteStream().use { input -> input.copyTo(out) }
+                }
+                if (tempFile.length() <= 0L) {
+                    throw IllegalStateException("下载失败：空文件（VIP/下架/无版权）")
+                }
+                if (target.exists()) {
+                    target.delete()
+                }
+                if (!tempFile.renameTo(target)) {
+                    tempFile.copyTo(target, overwrite = true)
+                    tempFile.delete()
+                }
+            } catch (e: Exception) {
+                tempFile.delete()
+                throw e
+            }
         }
-
-        val contentLength = response.body.contentLength()
-        if (contentLength == 0L) {
-            response.close()
-            throw IllegalStateException("歌曲不可播放（VIP/下架/无版权）")
-        }
-
-        // Closing this stream closes the underlying response/connection.
-        return response.body.byteStream()
     }
 
     override fun loadLyrics(track: Track): ParsedLyrics {
