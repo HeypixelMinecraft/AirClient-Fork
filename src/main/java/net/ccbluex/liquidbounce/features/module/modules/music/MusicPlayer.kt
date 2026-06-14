@@ -40,6 +40,9 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
     private val neteaseDomain by text("网易云域名", "music.163.com")
     private val openGuiOnEnable by boolean("打开界面", true)
 
+    /** Prevents openGui ↔ onEnable recursion when enabling the module to show the GUI. */
+    private var suppressOpenGuiOnEnable = false
+
     private var selectedMusicName = "无"
 
     private val engine = PlaybackEngine()
@@ -159,8 +162,8 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
             playLocalIndex(0)
         }
 
-        if (openGuiOnEnable) {
-            openGui()
+        if (openGuiOnEnable && !suppressOpenGuiOnEnable) {
+            mc.displayGuiScreen(GuiMusicPlayer(mc.currentScreen))
         }
     }
 
@@ -387,7 +390,12 @@ object MusicPlayer : Module("MusicPlayer", Category.CLIENT) {
 
     fun openGui(prev: net.minecraft.client.gui.GuiScreen? = mc.currentScreen) {
         if (!state) {
-            state = true
+            suppressOpenGuiOnEnable = true
+            try {
+                state = true
+            } finally {
+                suppressOpenGuiOnEnable = false
+            }
         }
         mc.displayGuiScreen(GuiMusicPlayer(prev))
     }
