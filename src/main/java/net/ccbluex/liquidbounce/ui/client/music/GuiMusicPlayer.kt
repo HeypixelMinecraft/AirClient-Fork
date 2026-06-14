@@ -39,16 +39,17 @@ class GuiMusicPlayer(private val prevGui: GuiScreen?) : AbstractScreen() {
     private var selectedIndex = -1
 
     private val bottomPanelHeight = 118
-    private val topBarHeight = 52
+    private val topBarHeight = 78
+    private val tabRowY = 58
 
     override fun initGui() {
         statusText = "就绪"
-        searchField = textField(100, Fonts.fontSemibold35, 20, 24, width - 200, 18) {
+        searchField = textField(100, Fonts.fontSemibold35, 20, 38, width - 110, 18) {
             maxStringLength = 128
         }
 
         trackList = TrackList(this).apply {
-            registerScrollButtons(7, 8)
+            registerScrollButtons(15, 16)
         }
 
         val sidebarX = width - 82
@@ -60,13 +61,13 @@ class GuiMusicPlayer(private val prevGui: GuiScreen?) : AbstractScreen() {
         +GuiButton(4, sidebarX, y, 72, 20, "下一首"); y += 24
         +GuiButton(5, sidebarX, y, 72, 20, "停止"); y += 24
         +GuiButton(6, sidebarX, y, 72, 20, "刷新本地"); y += 24
-        +GuiButton(7, 120, 24, 60, 20, "搜索")
-        +GuiButton(8, sidebarX, y, 72, 20, "音乐目录"); y += 24
-        +GuiButton(9, sidebarX, y, 34, 20, "-")
-        +GuiButton(10, sidebarX + 38, y, 34, 20, "+")
-        +GuiButton(11, 20, topBarHeight + 6, 56, 18, "本地")
-        +GuiButton(12, 80, topBarHeight + 6, 56, 18, "网易")
-        +GuiButton(13, 140, topBarHeight + 6, 56, 18, "队列")
+        +GuiButton(7, sidebarX, y, 72, 20, "音乐目录"); y += 24
+        +GuiButton(8, sidebarX, y, 34, 20, "-")
+        +GuiButton(9, sidebarX + 38, y, 34, 20, "+")
+        +GuiButton(11, 20, tabRowY, 52, 18, "本地")
+        +GuiButton(12, 76, tabRowY, 52, 18, "网易")
+        +GuiButton(13, 132, tabRowY, 52, 18, "队列")
+        +GuiButton(14, 188, tabRowY, 52, 18, "搜索")
 
         refreshListSelection()
     }
@@ -81,6 +82,9 @@ class GuiMusicPlayer(private val prevGui: GuiScreen?) : AbstractScreen() {
             Fonts.fontSemibold35.drawString("§7$statusText", 20f, 30f, Color.LIGHT_GRAY.rgb)
 
             searchField.drawTextBox()
+            if (searchField.text.isEmpty() && !searchField.isFocused) {
+                Fonts.fontSemibold35.drawString("§8搜索关键词或歌曲 ID", searchField.xPosition + 4f, searchField.yPosition + 5f, Color.GRAY.rgb)
+            }
 
             trackList.drawScreen(mouseX, mouseY, partialTicks)
             drawNowPlayingPanel()
@@ -140,23 +144,23 @@ class GuiMusicPlayer(private val prevGui: GuiScreen?) : AbstractScreen() {
                     trackList.refresh()
                 }
             }
-            7 -> searchNetease()
-            8 -> openMusicFolder()
-            9 -> MusicPlayer.setVolume(MusicPlayer.getVolume() - 5)
-            10 -> MusicPlayer.setVolume(MusicPlayer.getVolume() + 5)
+            7 -> openMusicFolder()
+            8 -> MusicPlayer.setVolume(MusicPlayer.getVolume() - 5)
+            9 -> MusicPlayer.setVolume(MusicPlayer.getVolume() + 5)
             11 -> switchTab(Tab.LOCAL)
             12 -> switchTab(Tab.NETEASE)
             13 -> switchTab(Tab.QUEUE)
+            14 -> searchNetease()
         }
     }
 
     override fun keyTyped(typedChar: Char, keyCode: Int) {
-        if (searchField.isFocused && keyCode == Keyboard.KEY_RETURN) {
-            if (currentTab == Tab.NETEASE) {
+        if (searchField.isFocused) {
+            if (keyCode == Keyboard.KEY_RETURN) {
                 searchNetease()
-            } else {
-                playSelected()
+                return
             }
+            searchField.textboxKeyTyped(typedChar, keyCode)
             return
         }
         if (keyCode == Keyboard.KEY_ESCAPE) {
@@ -287,7 +291,7 @@ class GuiMusicPlayer(private val prevGui: GuiScreen?) : AbstractScreen() {
         mc,
         gui.width - 90,
         gui.height,
-        topBarHeight + 28,
+        topBarHeight + 6,
         gui.height - bottomPanelHeight,
         22
     ) {
