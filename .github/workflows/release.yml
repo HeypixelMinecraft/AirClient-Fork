@@ -32,6 +32,12 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build --no-daemon
 
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          cp build/libs/AirClient-*.jar release/airclient.jar
+          cp -r zip_include/. release/
+
       - name: Detect prerelease
         id: prerelease
         run: |
@@ -47,7 +53,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/libs/*.zip
+          files: release/*
           generate_release_notes: true
           prerelease: ${{ steps.prerelease.outputs.prerelease }}
         env:
