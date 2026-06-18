@@ -38,6 +38,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AirClient
-          path: |
-            build/libs/*.jar
-            build/libs/*.zip
+          path: build/libs/*.zip
