@@ -225,7 +225,7 @@ task packageReleaseZip(type: Zip) {
 
     dependsOn reobfShadowJar
 
-    archiveBaseName.set("${project.archives_base_name}-${project.version}")
+    archiveBaseName.set("${project.archives_base_name}")
     archiveExtension.set("zip")
     destinationDirectory.set(file("${buildDir}/libs"))
 
