@@ -71,7 +71,7 @@ public class LightingEnginePlugin implements IMixinConfigPlugin {
             return null;
         }
 
-        return "mixins.phosphor.refmap.json";
+        return "liquidbounce.mixins.refmap.json";
     }
 
     @Override
