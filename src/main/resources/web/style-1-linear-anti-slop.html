@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aero Client - Web ClickGUI (live)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     STYLE 1 - ANTI-SLOP / LINEAR-TIER  (LIVE)
+     Skill: design-taste-frontend.
+     Same visual language as before: dark zinc canvas, single deep-rose
+     accent (#f43f5e), Geist + Geist Mono, all-soft 8px radius,
+     restrained motion, no em-dashes.
+     Now driven by the live /api/state endpoint instead of hardcoded data.
+     ============================================================ */
+
+  :root {
+    --bg: #09090b;
+    --surface: #131316;
+    --surface-2: #1c1c20;
+    --surface-3: #26262c;
+    --border: #2a2a30;
+    --border-strong: #3a3a42;
+    --text: #f4f4f5;
+    --text-2: #a1a1aa;
+    --text-3: #71717a;
+    --accent: #f43f5e;
+    --accent-soft: rgba(244, 63, 94, 0.14);
+    --accent-border: rgba(244, 63, 94, 0.35);
+    --on: #f43f5e;
+    --off: #3f3f46;
+    --good: #22c55e;
+    --bad: #ef4444;
+    --radius: 8px;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Geist", system-ui, -apple-system, sans-serif;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 78% -8%, rgba(244, 63, 94, 0.10), transparent 60%),
+      radial-gradient(40rem 30rem at 12% 110%, rgba(244, 63, 94, 0.06), transparent 60%);
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 220px 300px 1fr;
+    grid-template-rows: 56px 1fr;
+    grid-template-areas: "topbar topbar topbar" "rail list props";
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* TOPBAR */
+  .topbar {
+    grid-area: topbar;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(9, 9, 11, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.01em; font-size: 14px; }
+  .brand-mark {
+    width: 22px; height: 22px; border-radius: 6px; background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18);
+    display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .brand span.dim { color: var(--text-3); font-weight: 400; }
+
+  .conn {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .conn .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--bad); box-shadow: 0 0 0 0 var(--bad);
+    transition: background 0.3s var(--ease);
+  }
+  .conn.up .pulse { background: var(--good); animation: ping 2s var(--ease) infinite; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); } 70% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+  .conn .lbl { color: var(--text-2); }
+
+  .search { flex: 1; max-width: 420px; position: relative; }
+  .search input {
+    width: 100%; height: 34px; padding: 0 12px 0 34px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--sans); font-size: 13px; outline: none;
+    transition: border-color .2s var(--ease), background .2s var(--ease);
+  }
+  .search input::placeholder { color: var(--text-3); }
+  .search input:focus { border-color: var(--accent-border); background: var(--surface-2); }
+  .search .kbd { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+  .search .hint {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    font-family: var(--mono); font-size: 11px; color: var(--text-3);
+    border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .topbar-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+  .btn {
+    height: 32px; padding: 0 12px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+    font-family: var(--sans); font-size: 12.5px; font-weight: 500; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease), transform .1s var(--ease);
+  }
+  .btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+  .btn:active { transform: scale(0.98); }
+
+  /* CATEGORY RAIL */
+  .rail { grid-area: rail; border-right: 1px solid var(--border); padding: 16px 12px; overflow-y: auto; }
+  .rail-label { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-3); padding: 0 10px 8px; }
+  .cat {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 10px; border-radius: var(--radius); color: var(--text-2); cursor: pointer;
+    font-size: 13.5px; font-weight: 500; margin-bottom: 2px;
+    transition: background .15s var(--ease), color .15s var(--ease); border: 1px solid transparent;
+  }
+  .cat:hover { background: var(--surface); color: var(--text); }
+  .cat.active { background: var(--accent-soft); color: var(--text); border-color: var(--accent-border); }
+  .cat .count { font-family: var(--mono); font-size: 11px; color: var(--text-3); background: var(--surface-2); padding: 1px 7px; border-radius: 999px; }
+  .cat.active .count { background: rgba(244,63,94,0.18); color: var(--accent); }
+
+  /* MODULE LIST */
+  .list { grid-area: list; border-right: 1px solid var(--border); overflow-y: auto; padding: 8px 8px 24px; }
+  .list-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 12px 12px 10px; position: sticky; top: 0;
+    background: linear-gradient(to bottom, var(--bg) 70%, transparent);
+    backdrop-filter: blur(6px); z-index: 2;
+  }
+  .list-head h2 { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; text-transform: capitalize; }
+  .list-head .meta { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+  .mod {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-radius: var(--radius); cursor: pointer; margin-bottom: 1px;
+    border: 1px solid transparent; transition: background .15s var(--ease), border-color .15s var(--ease);
+  }
+  .mod:hover { background: var(--surface); }
+  .mod.selected { background: var(--surface-2); border-color: var(--border-strong); }
+  .mod.hidden-mod .mod-name { opacity: 0.5; }
+  .mod-name { font-size: 13.5px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .mod-key {
+    font-family: var(--mono); font-size: 10px; color: var(--text-3);
+    border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; min-width: 18px; text-align: center;
+  }
+  .mod.disabled .mod-name { color: var(--text-3); font-weight: 400; }
+  .hidden-tag { font-family: var(--mono); font-size: 9px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .toggle {
+    width: 32px; height: 18px; border-radius: 999px; background: var(--off);
+    position: relative; cursor: pointer; transition: background .2s var(--ease); flex-shrink: 0;
+  }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #fafafa; transition: transform .2s var(--ease);
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { transform: translateX(14px); }
+
+  /* PROPERTY PANEL */
+  .props { grid-area: props; overflow-y: auto; padding: 24px 32px 80px; }
+  .props-header {
+    padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  }
+  .props-header h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; display: flex; align-items: center; gap: 12px; }
+  .props-header .tag {
+    font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .props-header .tag.idle { color: var(--text-3); background: var(--surface-2); border-color: var(--border); }
+  .props-header .sub { color: var(--text-3); font-size: 12.5px; margin-top: 6px; font-family: var(--mono); }
+  .big-toggle { display: flex; align-items: center; gap: 10px; }
+  .big-toggle .toggle { width: 40px; height: 22px; }
+  .big-toggle .toggle::after { width: 18px; height: 18px; }
+  .big-toggle .toggle.on::after { transform: translateX(18px); }
+  .big-toggle .lbl { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
+
+  .prop-group { display: grid; grid-template-columns: 1fr; gap: 2px; margin-bottom: 28px; }
+  .prop-group-title { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); margin-bottom: 10px; padding-left: 2px; }
+  .prop {
+    display: grid; grid-template-columns: minmax(120px, 220px) 1fr; align-items: center;
+    gap: 16px; padding: 12px 12px; border-radius: var(--radius); transition: background .15s var(--ease);
+  }
+  .prop:hover { background: var(--surface); }
+  .prop-label { font-size: 13px; color: var(--text-2); }
+  .prop-control { display: flex; align-items: center; gap: 10px; }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    background: var(--surface-3); border-radius: 999px; outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text); border: 2px solid var(--bg); cursor: pointer;
+    transition: background .15s var(--ease), transform .1s var(--ease);
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent); }
+  input[type="range"]::-webkit-slider-thumb:active { transform: scale(1.15); }
+  input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--text); border: 2px solid var(--bg); cursor: pointer; }
+  .slider-row { width: 100%; display: flex; align-items: center; gap: 12px; }
+  .slider-val {
+    font-family: var(--mono); font-size: 12px; color: var(--text); min-width: 56px; text-align: right;
+    background: var(--surface-2); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
+  }
+
+  .seg {
+    display: inline-flex; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 2px; flex-wrap: wrap; max-width: 100%;
+  }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-3);
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+    transition: background .15s var(--ease), color .15s var(--ease);
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.active { background: var(--accent); color: #fff; }
+
+  .bool-mini {
+    width: 32px; height: 18px; border-radius: 999px; background: var(--off);
+    position: relative; cursor: pointer; transition: background .2s var(--ease); flex-shrink: 0;
+  }
+  .bool-mini::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fafafa; transition: transform .2s var(--ease); }
+  .bool-mini.on { background: var(--accent); }
+  .bool-mini.on::after { transform: translateX(14px); }
+
+  .color-chip { width: 28px; height: 28px; border-radius: var(--radius); border: 1px solid var(--border-strong); cursor: pointer; position: relative; }
+  .color-chip input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  input[type="text"].text-input {
+    flex: 1; height: 32px; padding: 0 10px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: 12px; outline: none;
+    transition: border-color .2s var(--ease);
+  }
+  input[type="text"].text-input:focus { border-color: var(--accent-border); }
+
+  .empty { display: grid; place-items: center; height: 100%; color: var(--text-3); text-align: center; padding: 40px; }
+  .empty .ic { width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--border); display: grid; place-items: center; margin: 0 auto 14px; color: var(--text-3); }
+  .empty h3 { color: var(--text); font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .empty p { font-size: 12.5px; }
+  .empty.connecting .ic { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .rail::-webkit-scrollbar, .list::-webkit-scrollbar, .props::-webkit-scrollbar { width: 8px; }
+  .rail::-webkit-scrollbar-thumb, .list::-webkit-scrollbar-thumb, .props::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 999px; }
+  .rail::-webkit-scrollbar-thumb:hover, .list::-webkit-scrollbar-thumb:hover, .props::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: fadeUp .45s var(--ease) both; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  }
+
+  @media (max-width: 980px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 56px auto 1fr; grid-template-areas: "topbar" "rail" "list"; }
+    .props { display: none; }
+    .rail { display: flex; gap: 6px; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 1px solid var(--border); }
+    .rail-label { display: none; }
+    .cat { white-space: nowrap; }
+    .list { border-right: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        Aero <span class="dim">/ ClickGUI (live)</span>
+      </div>
+      <div class="conn" id="conn"><span class="pulse"></span><span class="lbl">Connecting</span></div>
+      <div class="search">
+        <span class="kbd">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input id="search" type="text" placeholder="Search modules or settings" autocomplete="off">
+        <span class="hint">/</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" id="resyncBtn">Resync</button>
+      </div>
+    </header>
+
+    <nav class="rail" id="rail"></nav>
+    <section class="list" id="list"></section>
+    <section class="props" id="props"></section>
+  </div>
+
+<script>
+/* ============================================================
+   LIVE API CLIENT
+   Fetches /api/state every 400ms and re-renders on change.
+   Toggles and property edits POST immediately (sliders debounce).
+   Falls back to http://localhost:8790 when opened via file://.
+   ============================================================ */
+const API = (() => {
+  const base = location.protocol === "file:" ? "http://localhost:8790" : "";
+  let timer = null;
+  let lastSig = null;
+  let firstFetch = true;
+
+  async function fetchState() {
+    const res = await fetch(base + "/api/state", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  async function post(path, body) {
+    const res = await fetch(base + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  function toggle(module)      { return post("/api/toggle",   { module }); }
+  function setProperty(module, property, type, value) {
+    return post("/api/property", { module, property, type, value });
+  }
+  function start(onUpdate, onStatus) {
+    async function poll() {
+      try {
+        const data = await fetchState();
+        onStatus(true);
+        const sig = JSON.stringify(data);
+        if (sig !== lastSig || firstFetch) {
+          lastSig = sig;
+          firstFetch = false;
+          onUpdate(data);
+        }
+      } catch (e) {
+        onStatus(false);
+      }
+    }
+    poll();
+    timer = setInterval(poll, 400);
+  }
+  return { start, toggle, setProperty };
+})();
+
+/* ============================================================
+   APP STATE (derived from the live server snapshot)
+   ============================================================ */
+const CATEGORIES = [
+  { id: "combat",   label: "Combat" },
+  { id: "movement", label: "Movement" },
+  { id: "player",   label: "Player" },
+  { id: "render",   label: "Render" },
+  { id: "misc",     label: "Misc" },
+];
+
+let snapshot = null;        // last full state from the server
+let currentCat = "combat";
+let currentMod = null;      // selected module name
+let filter = "";
+let connected = false;
+
+/* debounce per-property so dragging a slider doesn't flood the server */
+const setTimers = new Map();
+function scheduleSet(module, property, type, value) {
+  const key = module + "." + property;
+  clearTimeout(setTimers.get(key));
+  setTimers.set(key, setTimeout(() => {
+    API.setProperty(module, property, type, value).catch(() => {});
+    setTimers.delete(key);
+  }, 120));
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function modsFor(catId) {
+  if (!snapshot) return [];
+  return snapshot.categories[catId] || [];
+}
+
+function findMod(catId, name) {
+  return modsFor(catId).find(m => m.name === name) || null;
+}
+
+function renderAll() {
+  renderRail();
+  renderList();
+  renderProps();
+}
+
+function renderRail() {
+  const rail = document.getElementById("rail");
+  rail.innerHTML = `<div class="rail-label">Categories</div>` +
+    CATEGORIES.map(c => {
+      const mods = modsFor(c.id);
+      const enabled = mods.filter(m => m.enabled).length;
+      return `<div class="cat ${c.id===currentCat?"active":""}" data-cat="${c.id}">
+        <span>${c.label}</span>
+        <span class="count">${enabled}/${mods.length}</span>
+      </div>`;
+    }).join("");
+  rail.querySelectorAll(".cat").forEach(el => {
+    el.addEventListener("click", () => {
+      currentCat = el.dataset.cat;
+      if (!findMod(currentCat, currentMod)) currentMod = modsFor(currentCat)[0]?.name || null;
+      renderAll();
+    });
+  });
+}
+
+function renderList() {
+  const list = document.getElementById("list");
+  const catLabel = CATEGORIES.find(c => c.id === currentCat).label;
+  let mods = modsFor(currentCat);
+  if (filter) {
+    const q = filter.toLowerCase();
+    mods = mods.filter(m =>
+      m.name.toLowerCase().includes(q) ||
+      (m.props || []).some(p => p.name.toLowerCase().includes(q))
+    );
+    // search across all categories when current yields nothing
+    if (!mods.length && snapshot) {
+      const all = [];
+      CATEGORIES.forEach(c => {
+        snapshot.categories[c.id].forEach(m => {
+          if (m.name.toLowerCase().includes(q) ||
+              (m.props || []).some(p => p.name.toLowerCase().includes(q))) {
+            all.push({ ...m, _cat: c.id });
+          }
+        });
+      });
+      mods = all;
+    }
+  }
+  const enabled = mods.filter(m => m.enabled).length;
+  const savedScroll = list.scrollTop;
+  list.innerHTML = `
+    <div class="list-head">
+      <h2>${filter ? "Search" : catLabel}</h2>
+      <span class="meta">${enabled} active / ${mods.length}</span>
+    </div>` +
+    mods.map((m, i) => {
+      const cat = m._cat || currentCat;
+      return `<div class="mod ${m.name===currentMod?"selected":""} ${m.enabled?"":"disabled"} ${m.hidden?"hidden-mod":""} reveal" data-mod="${m.name}" data-cat="${cat}" style="animation-delay:${Math.min(i,8)*30}ms">
+        <div class="mod-name">
+          ${m.name}${m.key?`<span class="mod-key">${m.key}</span>`:""}
+          ${m.hidden?`<span class="hidden-tag">hidden</span>`:""}
+        </div>
+        <div class="toggle ${m.enabled?"on":""}" data-toggle="${m.name}" data-cat="${cat}"></div>
+      </div>`;
+    }).join("");
+
+  list.scrollTop = savedScroll;
+  list.querySelectorAll(".mod").forEach(el => {
+    el.addEventListener("click", (e) => {
+      if (e.target.classList.contains("toggle")) return;
+      currentMod = el.dataset.mod;
+      if (el.dataset.cat !== currentCat) {
+        currentCat = el.dataset.cat;
+      }
+      renderAll();
+    });
+  });
+  list.querySelectorAll(".toggle").forEach(el => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cat = el.dataset.cat;
+      const name = el.dataset.toggle;
+      // optimistic flip
+      const m = findMod(cat, name);
+      if (m) { m.enabled = !m.enabled; renderList(); renderRail(); }
+      API.toggle(name).catch(() => {});
+    });
+  });
+}
+
+function propsHasFocus() {
+  const props = document.getElementById("props");
+  return props && props.contains(document.activeElement);
+}
+
+function renderProps() {
+  // don't clobber the panel while the user is editing an input
+  if (propsHasFocus()) return;
+  const panel = document.getElementById("props");
+  if (!snapshot) {
+    panel.innerHTML = loadingHTML();
+    return;
+  }
+  const mod = findMod(currentCat, currentMod);
+  if (!mod) {
+    panel.innerHTML = emptyHTML();
+    return;
+  }
+  if (!mod.props || !mod.props.length) {
+    panel.innerHTML = headerHTML(mod) + `<p class="sub" style="padding:24px 0;color:var(--text-3)">This module has no configurable properties.</p>`;
+    return;
+  }
+  const bools = mod.props.filter(p => p.type === "bool");
+  const others = mod.props.filter(p => p.type !== "bool");
+  let html = headerHTML(mod);
+  if (others.length) {
+    html += `<div class="prop-group"><div class="prop-group-title">Settings</div>`;
+    others.forEach(p => html += propRow(p, mod));
+    html += `</div>`;
+  }
+  if (bools.length) {
+    html += `<div class="prop-group"><div class="prop-group-title">Toggles</div>`;
+    bools.forEach(p => html += propRow(p, mod));
+    html += `</div>`;
+  }
+  panel.innerHTML = html;
+  bindPropEvents(mod);
+}
+
+function headerHTML(mod) {
+  return `
+    <div class="props-header reveal">
+      <div>
+        <h1>${mod.name}${mod.enabled?`<span class="tag">Active</span>`:`<span class="tag idle">Idle</span>`}</h1>
+        <div class="sub">${mod.category}${mod.key?` - key <span style="color:var(--accent)">${mod.key}</span>`:""} - ${mod.props.length} properties${mod.hidden?" - hidden":""}</div>
+      </div>
+      <div class="big-toggle">
+        <span class="lbl">${mod.enabled?"On":"Off"}</span>
+        <div class="toggle ${mod.enabled?"on":""}" data-bigtoggle></div>
+      </div>
+    </div>`;
+}
+
+function propRow(p, mod) {
+  let control = "";
+  if (p.type === "bool") {
+    control = `<div class="prop-control"><div class="bool-mini ${p.value?"on":""}" data-prop="${p.name}"></div></div>`;
+  } else if (p.type === "int" || p.type === "float") {
+    control = `<div class="prop-control"><div class="slider-row">
+      <input type="range" min="${p.min}" max="${p.max}" step="${p.type==="float"?"any":1}" value="${p.value}" data-prop="${p.name}" data-type="${p.type}">
+      <span class="slider-val">${formatNum(p.value)}</span>
+    </div></div>`;
+  } else if (p.type === "percent") {
+    control = `<div class="prop-control"><div class="slider-row">
+      <input type="range" min="0" max="100" step="1" value="${p.value}" data-prop="${p.name}" data-type="percent">
+      <span class="slider-val">${p.value}%</span>
+    </div></div>`;
+  } else if (p.type === "mode") {
+    control = `<div class="prop-control"><div class="seg" data-prop="${p.name}">
+      ${(p.options||[]).map((o,i)=>`<button class="${i===p.value?"active":""}" data-idx="${i}">${escapeHtml(o)}</button>`).join("")}
+    </div></div>`;
+  } else if (p.type === "color") {
+    control = `<div class="prop-control">
+      <label class="color-chip" style="background:${p.value}">
+        <input type="color" value="${p.value}" data-prop="${p.name}">
+      </label>
+      <span class="slider-val">${p.value.toUpperCase()}</span>
+    </div>`;
+  } else if (p.type === "text") {
+    control = `<div class="prop-control"><input type="text" class="text-input" value="${escapeHtml(p.value)}" data-prop="${p.name}"></div>`;
+  }
+  return `<div class="prop"><div class="prop-label">${p.name}</div>${control}</div>`;
+}
+
+function formatNum(v) {
+  if (typeof v !== "number") return v;
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+function bindPropEvents(mod) {
+  const panel = document.getElementById("props");
+  const bt = panel.querySelector("[data-bigtoggle]");
+  if (bt) bt.addEventListener("click", () => {
+    mod.enabled = !mod.enabled;
+    renderProps(); renderList(); renderRail();
+    API.toggle(mod.name).catch(() => {});
+  });
+  panel.querySelectorAll(".bool-mini").forEach(el => {
+    el.addEventListener("click", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      p.value = !p.value;
+      el.classList.toggle("on", p.value);
+      API.setProperty(mod.name, p.name, "bool", p.value).catch(() => {});
+    });
+  });
+  panel.querySelectorAll("input[type=range]").forEach(el => {
+    const val = el.parentElement.querySelector(".slider-val");
+    el.addEventListener("input", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      const v = el.dataset.type === "int" ? parseInt(el.value, 10) : parseFloat(el.value);
+      p.value = v;
+      if (el.dataset.type === "percent") val.textContent = `${v}%`;
+      else val.textContent = formatNum(v);
+      scheduleSet(mod.name, p.name, el.dataset.type, v);
+    });
+  });
+  panel.querySelectorAll(".seg").forEach(seg => {
+    seg.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        const p = mod.props.find(x => x.name === seg.dataset.prop);
+        p.value = parseInt(b.dataset.idx, 10);
+        seg.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        API.setProperty(mod.name, p.name, "mode", p.value).catch(() => {});
+      });
+    });
+  });
+  panel.querySelectorAll("input[type=color]").forEach(el => {
+    el.addEventListener("input", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      p.value = el.value;
+      el.parentElement.style.background = el.value;
+      el.parentElement.parentElement.querySelector(".slider-val").textContent = el.value.toUpperCase();
+      scheduleSet(mod.name, p.name, "color", el.value);
+    });
+  });
+  panel.querySelectorAll("input[type=text]").forEach(el => {
+    el.addEventListener("input", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      p.value = el.value;
+      scheduleSet(mod.name, p.name, "text", el.value);
+    });
+  });
+}
+
+function loadingHTML() {
+  return `<div class="empty connecting">
+    <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.5"/></svg></div>
+    <h3>Connecting to client</h3>
+    <p>Waiting for http://localhost:8790/api/state</p>
+  </div>`;
+}
+function emptyHTML() {
+  return `<div class="empty">
+    <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h12"/></svg></div>
+    <h3>No module selected</h3>
+    <p>Pick a module from the list to edit its settings.</p>
+  </div>`;
+}
+
+/* ============================================================
+   STATUS + WIRING
+   ============================================================ */
+function setStatus(up) {
+  connected = up;
+  const conn = document.getElementById("conn");
+  conn.classList.toggle("up", up);
+  conn.querySelector(".lbl").textContent = up ? "Live" : "Offline";
+}
+
+API.start((data) => {
+  snapshot = data;
+  // keep selection valid
+  if (!findMod(currentCat, currentMod)) {
+    const first = modsFor(currentCat)[0];
+    currentMod = first ? first.name : null;
+  }
+  renderAll();
+}, setStatus);
+
+document.getElementById("resyncBtn").addEventListener("click", () => {
+  // clear the debounce cache and force a fresh fetch
+  setTimers.forEach(t => clearTimeout(t));
+  setTimers.clear();
+});
+
+const searchInput = document.getElementById("search");
+searchInput.addEventListener("input", () => {
+  filter = searchInput.value;
+  renderList();
+  renderProps();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== searchInput) {
+    e.preventDefault();
+    searchInput.focus();
+  }
+});
+
+renderAll();
+</script>
+</body>
+</html>

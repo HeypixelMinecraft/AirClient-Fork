@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "Air Client",
+    "name": "Air Client",
+    "description": "Air Hack Client",
+    "version": "${version}",
+    "mcversion": "1.8.9",
+    "url": "https://liquidbounce.net",
+    "updateUrl": "",
+    "authorList": ["CCBlueX","LMX"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]

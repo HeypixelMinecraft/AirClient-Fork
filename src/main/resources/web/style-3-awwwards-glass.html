@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aero Client - Glass ClickGUI (live)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     STYLE 3 - AWWWARDS-TIER ETHEREAL GLASS  (LIVE)
+     Skill: high-end-visual-design.
+     Same ethereal-glass language as before: OLED black, radial mesh
+     orbs, double-bezel nested cards, custom cubic-bezier motion,
+     magnetic buttons. Now driven by the live /api/state endpoint.
+     All module cards are the same size (uniform span-4 bento).
+     ============================================================ */
+
+  :root {
+    --bg: #050505;
+    --bg-2: #0a0a0c;
+    --surface: rgba(20, 20, 28, 0.6);
+    --surface-2: rgba(28, 28, 38, 0.7);
+    --surface-3: rgba(40, 40, 52, 0.6);
+    --hairline: rgba(255, 255, 255, 0.10);
+    --hairline-strong: rgba(255, 255, 255, 0.18);
+    --text: #f5f5f7;
+    --text-2: rgba(245, 245, 247, 0.72);
+    --text-3: rgba(245, 245, 247, 0.45);
+    --accent: #a78bfa;
+    --accent-2: #34d399;
+    --accent-soft: rgba(167, 139, 250, 0.16);
+    --good: #34d399;
+    --bad: #f43f5e;
+    --radius-pill: 9999px;
+    --radius-shell: 2rem;
+    --radius-core: calc(2rem - 0.5rem);
+    --radius-md: 1.25rem;
+    --bezier: cubic-bezier(0.32, 0.72, 0, 1);
+    --sans: "Plus Jakarta Sans", system-ui, sans-serif;
+    --serif: "Instrument Serif", Georgia, serif;
+    --mono: "JetBrains Mono", "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    min-height: 100dvh;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(50rem 36rem at 82% -10%, rgba(167, 139, 250, 0.22), transparent 60%),
+      radial-gradient(40rem 30rem at 8% 8%, rgba(52, 211, 153, 0.10), transparent 60%),
+      radial-gradient(46rem 40rem at 50% 110%, rgba(167, 139, 250, 0.12), transparent 60%);
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .stage {
+    position: relative;
+    z-index: 2;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 40px 40px 120px;
+  }
+
+  /* FLOATING GLASS PILL NAV */
+  .nav {
+    position: sticky;
+    top: 24px;
+    z-index: 20;
+    width: max-content;
+    max-width: 100%;
+    margin: 0 auto 56px;
+    padding: 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(15, 15, 20, 0.55);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    border: 1px solid var(--hairline);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 24px 80px rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px 8px 12px;
+    font-weight: 700; font-size: 14px; letter-spacing: -0.01em;
+  }
+  .nav-brand .orb {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #c4b5fd, #7c3aed 70%);
+    box-shadow: 0 0 18px rgba(167, 139, 250, 0.6);
+  }
+  .nav-brand .dim { color: var(--text-3); font-weight: 400; }
+
+  .nav-conn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 12px 0 4px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .nav-conn .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--bad);
+    transition: background 0.3s var(--bezier);
+  }
+  .nav-conn.up .pulse { background: var(--good); animation: glow 2s var(--bezier) infinite; }
+  @keyframes glow { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); } 50% { box-shadow: 0 0 0 6px rgba(52,211,153,0); } }
+
+  .nav-divider { width: 1px; height: 22px; background: var(--hairline); margin: 0 4px; }
+  .nav-cat {
+    border: 0; background: transparent;
+    color: var(--text-2);
+    font-family: var(--sans); font-size: 13px; font-weight: 600;
+    padding: 8px 14px; border-radius: var(--radius-pill); cursor: pointer;
+    transition: color 0.3s var(--bezier), background 0.3s var(--bezier);
+    text-transform: capitalize; white-space: nowrap;
+  }
+  .nav-cat:hover { color: var(--text); }
+  .nav-cat.active {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.28), rgba(167, 139, 250, 0.10));
+    color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  .nav-search {
+    padding: 0 8px 0 10px;
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text-3);
+  }
+  .nav-search input {
+    background: transparent; border: 0; outline: 0;
+    color: var(--text); font-family: var(--sans);
+    font-size: 13px; width: 120px;
+  }
+  .nav-search input::placeholder { color: var(--text-3); }
+  .nav-actions { display: flex; gap: 6px; padding-right: 4px; }
+
+  .btn {
+    height: 36px; padding: 0 6px 0 14px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--hairline);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-2);
+    font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: background 0.3s var(--bezier), color 0.3s var(--bezier), transform 0.15s var(--bezier);
+    backdrop-filter: blur(12px);
+  }
+  .btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+  .btn:active { transform: scale(0.97); }
+  .btn .ic {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    display: grid; place-items: center;
+    transition: transform 0.3s var(--bezier), background 0.3s var(--bezier);
+  }
+  .btn:hover .ic { transform: translate(1px, -1px) scale(1.05); background: rgba(255, 255, 255, 0.14); }
+
+  /* MASTHEAD */
+  .masthead {
+    padding: 32px 0 64px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 48px;
+    align-items: end;
+  }
+  .masthead .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px 6px 6px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--text-2); margin-bottom: 24px;
+  }
+  .eyebrow .pip {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 12px var(--accent);
+    display: grid; place-items: center;
+    font-size: 9px; color: #050505; font-weight: 800;
+  }
+  .masthead h1 {
+    font-family: var(--sans); font-weight: 800;
+    font-size: clamp(40px, 6vw, 76px);
+    line-height: 0.98; letter-spacing: -0.035em; color: var(--text);
+  }
+  .masthead h1 em {
+    font-family: var(--serif); font-style: italic; font-weight: 400;
+    background: linear-gradient(135deg, #c4b5fd, #a78bfa 50%, #34d399);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .masthead .lede {
+    color: var(--text-2); font-size: 16px; line-height: 1.55;
+    max-width: 44ch; margin-top: 24px;
+  }
+  .masthead .stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .stat {
+    padding: 22px 24px; border-radius: var(--radius-md);
+    background: var(--surface); border: 1px solid var(--hairline);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  .stat .num {
+    font-family: var(--sans); font-size: 36px; font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #fff, rgba(167, 139, 250, 0.7));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .stat .lbl {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--text-3); margin-top: 4px;
+  }
+
+  /* SECTION HEAD */
+  .section-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 56px 0 28px;
+  }
+  .section-head h2 {
+    font-family: var(--sans); font-weight: 700;
+    font-size: 28px; letter-spacing: -0.025em;
+  }
+  .section-head h2 em {
+    font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--accent);
+  }
+  .section-head .meta { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
+
+  /* BENTO GRID - uniform card sizing */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 16px;
+  }
+  .card {
+    grid-column: span 4;
+    border-radius: var(--radius-shell);
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--hairline);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 30px 80px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    cursor: pointer;
+    transition: transform 0.4s var(--bezier), border-color 0.4s var(--bezier), background 0.4s var(--bezier);
+    position: relative;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: var(--hairline-strong);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .card.enabled {
+    border-color: rgba(167, 139, 250, 0.45);
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.12), rgba(167, 139, 250, 0.03));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 0 1px rgba(167, 139, 250, 0.18), 0 30px 90px rgba(124, 58, 237, 0.22);
+  }
+  .card-inner {
+    border-radius: var(--radius-core);
+    background: linear-gradient(180deg, rgba(20, 20, 28, 0.6), rgba(10, 10, 14, 0.5));
+    padding: 22px 24px;
+    height: 100%;
+    display: flex; flex-direction: column; gap: 16px;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06);
+  }
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .card-title { font-family: var(--sans); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .card-desc { color: var(--text-2); font-size: 13px; line-height: 1.5; flex: 1; }
+  .card-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+  .kbd {
+    font-family: var(--mono); font-size: 11px; color: var(--text-2);
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--hairline);
+    border-radius: 6px; padding: 2px 8px;
+  }
+  .badge {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 4px 10px; border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.06); color: var(--text-3);
+    border: 1px solid var(--hairline);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .badge.on {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.3), rgba(167, 139, 250, 0.1));
+    color: #ddd6fe; border-color: rgba(167, 139, 250, 0.4);
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+  .badge.on .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+  /* MODAL (double-bezel property sheet) */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(5, 5, 5, 0.7);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s var(--bezier);
+    z-index: 60;
+    display: grid; place-items: center; padding: 40px;
+  }
+  .modal-bg.open { opacity: 1; pointer-events: auto; }
+  .modal {
+    width: min(720px, 100%); max-height: 86vh;
+    border-radius: var(--radius-shell); padding: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--hairline-strong);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 50px 120px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    transform: scale(0.94) translateY(20px); opacity: 0;
+    transition: transform 0.5s var(--bezier), opacity 0.4s var(--bezier);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-bg.open .modal { transform: scale(1) translateY(0); opacity: 1; }
+  .modal-inner {
+    border-radius: var(--radius-core);
+    background: linear-gradient(180deg, rgba(18, 18, 26, 0.85), rgba(8, 8, 12, 0.85));
+    display: flex; flex-direction: column; overflow: hidden; height: 100%;
+  }
+  .modal-head {
+    padding: 28px 32px 24px; border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  }
+  .modal-head h2 { font-family: var(--sans); font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .modal-head .sub { color: var(--text-3); font-family: var(--mono); font-size: 12px; margin-top: 8px; }
+  .modal-close {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid var(--hairline); background: rgba(255, 255, 255, 0.04);
+    cursor: pointer; display: grid; place-items: center; color: var(--text-2);
+    transition: all 0.3s var(--bezier);
+  }
+  .modal-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; transform: rotate(90deg); }
+
+  .modal-toggle {
+    display: flex; align-items: center; gap: 14px; padding: 20px 32px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .modal-toggle .lbl { font-size: 14px; font-weight: 600; color: var(--text-2); }
+  .modal-toggle .state {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-3); margin-left: auto;
+  }
+  .switch {
+    width: 52px; height: 30px; border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.08); border: 1px solid var(--hairline);
+    position: relative; cursor: pointer;
+    transition: background 0.4s var(--bezier), border-color 0.4s var(--bezier);
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+    border-radius: 50%; background: linear-gradient(180deg, #fff, #d4d4d8);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    transition: transform 0.4s var(--bezier);
+  }
+  .switch.on {
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 20px rgba(167, 139, 250, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  .switch.on::after { transform: translateX(22px); }
+
+  .modal-body { flex: 1; overflow-y: auto; padding: 8px 24px 24px; }
+  .modal-body::-webkit-scrollbar { width: 6px; }
+  .modal-body::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 999px; }
+
+  .prop-group-title {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--text-3); padding: 20px 8px 12px;
+  }
+  .prop {
+    padding: 16px 8px; border-bottom: 1px solid var(--hairline);
+    display: grid; grid-template-columns: minmax(140px, 220px) 1fr; align-items: center; gap: 20px;
+  }
+  .prop:last-child { border-bottom: 0; }
+  .prop-label { font-size: 14px; font-weight: 500; color: var(--text); }
+  .prop-control { display: flex; align-items: center; gap: 14px; justify-content: flex-end; }
+  .prop-val {
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--hairline);
+    padding: 4px 10px; border-radius: 8px; min-width: 60px; text-align: center;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    background: rgba(255, 255, 255, 0.1); border-radius: 999px; outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(180deg, #c4b5fd, #7c3aed);
+    border: 3px solid #0a0a0c; box-shadow: 0 0 12px rgba(167, 139, 250, 0.6);
+    cursor: pointer; transition: transform 0.2s var(--bezier);
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(180deg, #c4b5fd, #7c3aed); border: 3px solid #0a0a0c;
+  }
+
+  .seg {
+    display: inline-flex; padding: 4px;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill); gap: 2px; flex-wrap: wrap; max-width: 100%;
+  }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-3);
+    font-family: var(--sans); font-size: 12px; font-weight: 600;
+    padding: 6px 12px; border-radius: var(--radius-pill); cursor: pointer; white-space: nowrap;
+    transition: all 0.3s var(--bezier);
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.active {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.35), rgba(124, 58, 237, 0.25));
+    color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+
+  .color-chip {
+    width: 36px; height: 36px; border-radius: 12px;
+    border: 1px solid var(--hairline-strong); cursor: pointer; position: relative; overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  .color-chip input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  input[type="text"].text-input {
+    flex: 1; height: 38px; padding: 0 14px;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hairline);
+    border-radius: 12px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none;
+    transition: border-color 0.3s var(--bezier), background 0.3s var(--bezier);
+  }
+  input[type="text"].text-input:focus { border-color: rgba(167, 139, 250, 0.5); background: rgba(255, 255, 255, 0.06); }
+
+  .modal-foot {
+    padding: 20px 32px; border-top: 1px solid var(--hairline);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .modal-foot .hint {
+    font-family: var(--mono); font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+
+  .empty { grid-column: span 12; padding: 80px 0; text-align: center; color: var(--text-3); }
+  .empty .ic {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 1px solid var(--hairline); background: rgba(255, 255, 255, 0.04);
+    display: grid; place-items: center; margin: 0 auto 20px;
+  }
+  .empty h3 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .empty p { font-size: 14px; }
+  .empty.connecting .ic { animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      opacity: 0; transform: translateY(40px); filter: blur(8px);
+      transition: opacity 0.8s var(--bezier), transform 0.8s var(--bezier), filter 0.8s var(--bezier);
+    }
+    .reveal.in { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+
+  @media (max-width: 900px) {
+    .stage { padding: 24px 20px 80px; }
+    .masthead { grid-template-columns: 1fr; gap: 32px; }
+    .nav { flex-wrap: wrap; border-radius: 1.5rem; padding: 8px; }
+    .nav-search input { width: 90px; }
+    .bento { grid-template-columns: repeat(6, 1fr); }
+    .card { grid-column: span 6 !important; }
+    .modal-bg { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <nav class="nav">
+      <div class="nav-brand">
+        <span class="orb"></span>
+        Aero <span class="dim">/ Glass (live)</span>
+      </div>
+      <div class="nav-conn" id="navConn"><span class="pulse"></span><span class="lbl">Offline</span></div>
+      <span class="nav-divider"></span>
+      <div id="navCats" style="display:flex;gap:2px"></div>
+      <span class="nav-divider"></span>
+      <label class="nav-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Search" autocomplete="off">
+      </label>
+      <div class="nav-actions">
+        <button class="btn" id="resyncBtn">Resync <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span></button>
+      </div>
+    </nav>
+
+    <header class="masthead reveal">
+      <div>
+        <span class="eyebrow"><span class="pip">A</span> Aero Client / Live Module Manager</span>
+        <h1>Command<br>the <em>client</em>.</h1>
+        <p class="lede">A tactile control surface for every module. Toggle, refine, and watch changes propagate to the running game in real time. The whole interface floats as a single piece of frosted glass.</p>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="num" id="statActive">0</div>
+          <div class="lbl">Active modules</div>
+        </div>
+        <div class="stat">
+          <div class="num" id="statTotal">0</div>
+          <div class="lbl">Total modules</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="section-head">
+      <h2 id="catTitle">Combat <em>modules</em></h2>
+      <span class="meta" id="catMeta">0 modules</span>
+    </div>
+
+    <div class="bento" id="bento"></div>
+  </div>
+
+  <!-- Property modal -->
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <div>
+            <h2 id="mTitle">Module</h2>
+            <div class="sub" id="mSub"></div>
+          </div>
+          <button class="modal-close" id="mClose" aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-toggle">
+          <span class="lbl">Enabled</span>
+          <span class="state" id="mState">Off</span>
+          <div class="switch" id="mSwitch"></div>
+        </div>
+        <div class="modal-body" id="mBody"></div>
+        <div class="modal-foot">
+          <span class="hint" id="mHint">Changes apply live</span>
+          <button class="btn" id="mDone">Done <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================================================
+   LIVE API CLIENT
+   Same shape as Style 1: polls /api/state every 400ms, POSTs
+   toggles and property edits. Sliders debounce per-property.
+   ============================================================ */
+const API = (() => {
+  const base = location.protocol === "file:" ? "http://localhost:8790" : "";
+  let lastSig = null;
+  let firstFetch = true;
+
+  async function fetchState() {
+    const res = await fetch(base + "/api/state", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  async function post(path, body) {
+    const res = await fetch(base + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  function toggle(module) { return post("/api/toggle", { module }); }
+  function setProperty(module, property, type, value) {
+    return post("/api/property", { module, property, type, value });
+  }
+  function start(onUpdate, onStatus) {
+    async function poll() {
+      try {
+        const data = await fetchState();
+        onStatus(true);
+        const sig = JSON.stringify(data);
+        if (sig !== lastSig || firstFetch) {
+          lastSig = sig;
+          firstFetch = false;
+          onUpdate(data);
+        }
+      } catch (e) {
+        onStatus(false);
+      }
+    }
+    poll();
+    setInterval(poll, 400);
+  }
+  return { start, toggle, setProperty };
+})();
+
+const CATEGORIES = [
+  { id: "combat",   label: "Combat" },
+  { id: "movement", label: "Movement" },
+  { id: "player",   label: "Player" },
+  { id: "render",   label: "Render" },
+  { id: "misc",     label: "Misc" },
+];
+
+let snapshot = null;
+let currentCat = "combat";
+let selected = null;   // { cat, modName }
+let filter = "";
+
+const setTimers = new Map();
+function scheduleSet(module, property, type, value) {
+  const key = module + "." + property;
+  clearTimeout(setTimers.get(key));
+  setTimers.set(key, setTimeout(() => {
+    API.setProperty(module, property, type, value).catch(() => {});
+    setTimers.delete(key);
+  }, 120));
+}
+
+function modsFor(catId) {
+  if (!snapshot) return [];
+  return snapshot.categories[catId] || [];
+}
+function findMod(catId, name) {
+  return modsFor(catId).find(m => m.name === name) || null;
+}
+
+function renderNav() {
+  const nav = document.getElementById("navCats");
+  nav.innerHTML = CATEGORIES.map(c =>
+    `<button class="nav-cat ${c.id===currentCat?"active":""}" data-cat="${c.id}">${c.label}</button>`
+  ).join("");
+  nav.querySelectorAll(".nav-cat").forEach(b => {
+    b.addEventListener("click", () => { currentCat = b.dataset.cat; renderAll(); });
+  });
+}
+
+function renderBento() {
+  const catLabel = CATEGORIES.find(c => c.id === currentCat).label;
+  document.getElementById("catTitle").innerHTML = `${catLabel} <em>modules</em>`;
+
+  let mods = modsFor(currentCat);
+  if (filter) {
+    const q = filter.toLowerCase();
+    const all = [];
+    CATEGORIES.forEach(c => modsFor(c.id).forEach(m => {
+      if (m.name.toLowerCase().includes(q) ||
+          (m.props || []).some(p => p.name.toLowerCase().includes(q))) {
+        all.push({ ...m, _cat: c.id });
+      }
+    }));
+    mods = all;
+    document.getElementById("catTitle").innerHTML = `Search <em>results</em>`;
+  }
+  document.getElementById("catMeta").textContent = `${mods.length} module${mods.length===1?"":"s"}`;
+
+  if (snapshot) {
+    document.getElementById("statActive").textContent = snapshot.totalActive;
+    document.getElementById("statTotal").textContent = snapshot.totalModules;
+  }
+
+  const bento = document.getElementById("bento");
+  if (!mods.length) {
+    bento.innerHTML = snapshot ? emptyHTML() : connectingHTML();
+    return;
+  }
+
+  // uniform span-4 - every card is the same size
+  bento.innerHTML = mods.map((m, i) => {
+    const cat = m._cat || currentCat;
+    return `<article class="card reveal ${m.enabled?"enabled":""}" data-mod="${m.name}" data-cat="${cat}" style="transition-delay:${Math.min(i,10)*70}ms">
+      <div class="card-inner">
+        <div class="card-head">
+          <div class="card-title">${m.name}</div>
+          <span class="badge ${m.enabled?"on":""}"><span class="dot"></span>${m.enabled?"Active":"Idle"}</span>
+        </div>
+        <div class="card-desc">${cat} module${m.hidden?" &middot; hidden":""} &middot; ${m.props.length} settings</div>
+        <div class="card-foot">
+          ${m.key?`<span class="kbd">${m.key}</span>`:`<span class="kbd">&middot;</span>`}
+          <span class="kbd">${cat}</span>
+        </div>
+      </div>
+    </article>`;
+  }).join("");
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.05 });
+  bento.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+  bento.querySelectorAll(".card").forEach(el => {
+    el.addEventListener("click", () => openModal(el.dataset.cat, el.dataset.mod));
+  });
+}
+
+function openModal(cat, modName) {
+  selected = { cat, modName };
+  const mod = findMod(cat, modName);
+  if (!mod) return;
+  document.getElementById("mTitle").textContent = mod.name;
+  document.getElementById("mSub").textContent = `${cat} / ${mod.props.length} settings${mod.hidden?" / hidden":""}`;
+  document.getElementById("mState").textContent = mod.enabled ? "On" : "Off";
+  document.getElementById("mSwitch").classList.toggle("on", mod.enabled);
+  renderModalBody(mod);
+  document.getElementById("modalBg").classList.add("open");
+}
+
+function closeModal() {
+  document.getElementById("modalBg").classList.remove("open");
+  selected = null;
+  renderBento();
+}
+
+function modalHasFocus() {
+  const body = document.getElementById("mBody");
+  return body && body.contains(document.activeElement);
+}
+
+function refreshModal() {
+  // re-sync the modal contents with the latest snapshot, without clobbering
+  // the input the user is currently editing
+  if (!selected) return;
+  const mod = findMod(selected.cat, selected.modName);
+  if (!mod) return;
+  document.getElementById("mState").textContent = mod.enabled ? "On" : "Off";
+  document.getElementById("mSwitch").classList.toggle("on", mod.enabled);
+  if (!modalHasFocus()) renderModalBody(mod);
+}
+
+function renderModalBody(mod) {
+  const body = document.getElementById("mBody");
+  if (!mod.props || !mod.props.length) {
+    body.innerHTML = `<div class="empty" style="padding:48px 0"><p>This module has no configurable properties.</p></div>`;
+    return;
+  }
+  const bools = mod.props.filter(p => p.type === "bool");
+  const others = mod.props.filter(p => p.type !== "bool");
+  let html = "";
+  if (others.length) {
+    html += `<div class="prop-group-title">Settings</div>`;
+    others.forEach(p => html += propRow(p, mod));
+  }
+  if (bools.length) {
+    html += `<div class="prop-group-title">Toggles</div>`;
+    bools.forEach(p => html += propRow(p, mod));
+  }
+  body.innerHTML = html;
+  bindPropEvents(mod);
+}
+
+function propRow(p, mod) {
+  let control = "";
+  if (p.type === "bool") {
+    control = `<div class="switch ${p.value?"on":""}" data-prop="${p.name}" style="width:44px;height:26px"></div>`;
+  } else if (p.type === "int" || p.type === "float") {
+    control = `<div style="flex:1;display:flex;align-items:center;gap:14px">
+      <input type="range" min="${p.min}" max="${p.max}" step="${p.type==="float"?"any":1}" value="${p.value}" data-prop="${p.name}" data-type="${p.type}">
+      <span class="prop-val">${formatNum(p.value)}</span>
+    </div>`;
+  } else if (p.type === "percent") {
+    control = `<div style="flex:1;display:flex;align-items:center;gap:14px">
+      <input type="range" min="0" max="100" step="1" value="${p.value}" data-prop="${p.name}" data-type="percent">
+      <span class="prop-val">${p.value}%</span>
+    </div>`;
+  } else if (p.type === "mode") {
+    control = `<div class="seg" data-prop="${p.name}">
+      ${(p.options||[]).map((o,i)=>`<button class="${i===p.value?"active":""}" data-idx="${i}">${escapeHtml(o)}</button>`).join("")}
+    </div>`;
+  } else if (p.type === "color") {
+    control = `<label class="color-chip" style="background:${p.value}">
+      <input type="color" value="${p.value}" data-prop="${p.name}">
+    </label>
+    <span class="prop-val">${p.value.toUpperCase()}</span>`;
+  } else if (p.type === "text") {
+    control = `<input type="text" class="text-input" value="${escapeHtml(p.value)}" data-prop="${p.name}">`;
+  }
+  return `<div class="prop"><div class="prop-label">${p.name}</div><div class="prop-control">${control}</div></div>`;
+}
+
+function formatNum(v) { if (typeof v !== "number") return v; return Number.isInteger(v) ? String(v) : v.toFixed(2); }
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+function bindPropEvents(mod) {
+  const body = document.getElementById("mBody");
+  body.querySelectorAll(".switch[data-prop]").forEach(el => {
+    el.addEventListener("click", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      p.value = !p.value;
+      el.classList.toggle("on", p.value);
+      API.setProperty(mod.name, p.name, "bool", p.value).catch(() => {});
+    });
+  });
+  body.querySelectorAll("input[type=range]").forEach(el => {
+    const val = el.parentElement.querySelector(".prop-val");
+    el.addEventListener("input", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      const v = el.dataset.type === "int" ? parseInt(el.value, 10) : parseFloat(el.value);
+      p.value = v;
+      if (el.dataset.type === "percent") val.textContent = `${v}%`;
+      else val.textContent = formatNum(v);
+      scheduleSet(mod.name, p.name, el.dataset.type, v);
+    });
+  });
+  body.querySelectorAll(".seg").forEach(seg => {
+    seg.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        const p = mod.props.find(x => x.name === seg.dataset.prop);
+        p.value = parseInt(b.dataset.idx, 10);
+        seg.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        API.setProperty(mod.name, p.name, "mode", p.value).catch(() => {});
+      });
+    });
+  });
+  body.querySelectorAll("input[type=color]").forEach(el => {
+    el.addEventListener("input", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      p.value = el.value;
+      el.parentElement.style.background = el.value;
+      el.parentElement.parentElement.querySelector(".prop-val").textContent = el.value.toUpperCase();
+      scheduleSet(mod.name, p.name, "color", el.value);
+    });
+  });
+  body.querySelectorAll("input[type=text]").forEach(el => {
+    el.addEventListener("input", () => {
+      const p = mod.props.find(x => x.name === el.dataset.prop);
+      p.value = el.value;
+      scheduleSet(mod.name, p.name, "text", el.value);
+    });
+  });
+}
+
+document.getElementById("mClose").addEventListener("click", closeModal);
+document.getElementById("mDone").addEventListener("click", closeModal);
+document.getElementById("modalBg").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("modalBg")) closeModal();
+});
+document.getElementById("mSwitch").addEventListener("click", () => {
+  if (!selected) return;
+  const mod = findMod(selected.cat, selected.modName);
+  if (!mod) return;
+  mod.enabled = !mod.enabled;
+  document.getElementById("mState").textContent = mod.enabled ? "On" : "Off";
+  document.getElementById("mSwitch").classList.toggle("on", mod.enabled);
+  API.toggle(mod.name).catch(() => {});
+});
+
+document.getElementById("resyncBtn").addEventListener("click", () => {
+  setTimers.forEach(t => clearTimeout(t));
+  setTimers.clear();
+  flash("Resyncing...");
+});
+
+function flash(msg) {
+  const hint = document.getElementById("mHint");
+  const orig = hint.textContent;
+  hint.textContent = msg;
+  setTimeout(() => hint.textContent = orig, 1600);
+}
+
+document.getElementById("search").addEventListener("input", (e) => {
+  filter = e.target.value;
+  renderBento();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
+
+function setStatus(up) {
+  const conn = document.getElementById("navConn");
+  conn.classList.toggle("up", up);
+  conn.querySelector(".lbl").textContent = up ? "Live" : "Offline";
+}
+
+function renderAll() {
+  renderNav();
+  renderBento();
+  if (selected) refreshModal();
+}
+
+function connectingHTML() {
+  return `<div class="empty connecting" style="grid-column:span 12">
+    <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.5"/></svg></div>
+    <h3>Connecting to client</h3>
+    <p>Waiting for http://localhost:8790/api/state</p>
+  </div>`;
+}
+function emptyHTML() {
+  return `<div class="empty" style="grid-column:span 12">
+    <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+    <h3>No modules found</h3>
+    <p>Try a different search term.</p>
+  </div>`;
+}
+
+API.start((data) => {
+  snapshot = data;
+  renderAll();
+}, setStatus);
+
+renderAll();
+</script>
+</body>
+</html>
