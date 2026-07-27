@@ -96,8 +96,10 @@ object Island : Module("Island", Category.RENDER) {
     private val shadowColor by color("Shadow-Color", Color(0, 0, 0, 120)) { ShadowCheck }
 
     private val blurCheck by boolean("Blur", true)
-    private val blurMode by choices("BlurMode", arrayOf("Gaussian", "Dual", "Better"), "Better") { blurCheck }
+    private val blurMode by choices("BlurMode", arrayOf("Gaussian", "Dual", "Better", "Kawase"), "Better") { blurCheck }
     private val blurRadius by float("BlurStrength", 10F, 1F..50F) { blurCheck }
+    private val kawaseIterations by int("Kawase-Iterations", 4, 1..10) { blurCheck && blurMode == "Kawase" }
+    private val kawaseOffset by int("Kawase-Offset", 3, 1..10) { blurCheck && blurMode == "Kawase" }
 
     private val notifyDuration by int("NotifyTime(ms)", 1000, 100..10000) { style == "legacy" }
     private val versionNameUp by text("VersionName", "development") { false }
@@ -279,6 +281,11 @@ object Island : Module("Island", Category.RENDER) {
             "Gaussian" -> BlurEffects.blurArea(x, y, w, h, blurRadius, BlurEffects.BlurMode.GAUSSIAN)
             "Dual" -> BlurEffects.blurArea(x, y, w, h, blurRadius, BlurEffects.BlurMode.DUAL)
             "Better" -> BlurEffects.blurArea(x, y, w, h, blurRadius, BlurEffects.BlurMode.BETTER)
+            "Kawase" -> {
+                // KawaseBlur 需要 stencil texture，这里使用当前 framebuffer 的 texture
+                val stencilTexture = mc.framebuffer.framebufferTexture
+                net.ccbluex.liquidbounce.utils.render.shader.KawaseBlur.renderBlur(stencilTexture, kawaseIterations, kawaseOffset)
+            }
         }
         // Restore GL state after blur
         glEnable(GL_BLEND)

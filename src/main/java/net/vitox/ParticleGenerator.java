@@ -25,6 +25,11 @@ public class ParticleGenerator {
     private int prevWidth;
     private int prevHeight;
 
+    /**
+     * 复用的 Random，避免每次 create() 都构造新实例。
+     */
+    private final Random random = new Random();
+
     public ParticleGenerator(final int amount) {
         this.amount = amount;
     }
@@ -38,29 +43,60 @@ public class ParticleGenerator {
         prevWidth = mc.displayWidth;
         prevHeight = mc.displayHeight;
 
-        for (final Particle particle : particles) {
+        final int range = 50;
+        final int particlesSize = particles.size();
+
+        // 第一遍：所有粒子统一更新位置与插值
+        for (int i = 0; i < particlesSize; i++) {
+            final Particle particle = particles.get(i);
             particle.fall();
             particle.interpolation();
+        }
 
-            int range = 50;
-            final boolean mouseOver = (mouseX >= particle.x - range) && (mouseY >= particle.y - range) && (mouseX <= particle.x + range) && (mouseY <= particle.y + range);
+        // 第二遍：绘制并处理连线。
+        // 原实现使用 particles.stream().filter(...).forEach(...) 在每个 mouseOver 的粒子上都创建一条
+        // 流水线（lambda + 多次 Iterator/Supplier 实例），属于热路径，会产生持续 GC 压力。
+        // 这里改为普通的双层 for 循环，避免任何 lambda/Stream 对象分配。
+        for (int i = 0; i < particlesSize; i++) {
+            final Particle particle = particles.get(i);
+            final float px = particle.getX();
+            final float py = particle.getY();
+
+            final boolean mouseOver = (mouseX >= px - range) && (mouseY >= py - range)
+                    && (mouseX <= px + range) && (mouseY <= py + range);
 
             if (mouseOver) {
-                particles.stream()
-                        .filter(part -> (part.getX() > particle.getX() && part.getX() - particle.getX() < range
-                                && particle.getX() - part.getX() < range)
-                                && (part.getY() > particle.getY() && part.getY() - particle.getY() < range
-                                || particle.getY() > part.getY() && particle.getY() - part.getY() < range))
-                        .forEach(connectable -> particle.connect(connectable.getX(), connectable.getY()));
+                for (int j = 0; j < particlesSize; j++) {
+                    if (j == i) continue;
+                    final Particle other = particles.get(j);
+                    final float ox = other.getX();
+                    final float oy = other.getY();
+
+                    final boolean xInRange;
+                    if (ox > px) {
+                        xInRange = ox - px < range;
+                    } else {
+                        xInRange = px - ox < range;
+                    }
+                    if (!xInRange) continue;
+
+                    final boolean yInRange;
+                    if (oy > py) {
+                        yInRange = oy - py < range;
+                    } else {
+                        yInRange = py - oy < range;
+                    }
+                    if (!yInRange) continue;
+
+                    particle.connect(ox, oy);
+                }
             }
 
-            drawCircle(particle.getX(), particle.getY(), particle.size, 0xffFFFFFF);
+            drawCircle(px, py, particle.size, 0xffFFFFFF);
         }
     }
 
     private void create() {
-        final Random random = new Random();
-
         for (int i = 0; i < amount; i++)
             particles.add(new Particle(random.nextInt(mc.displayWidth), random.nextInt(mc.displayHeight)));
     }

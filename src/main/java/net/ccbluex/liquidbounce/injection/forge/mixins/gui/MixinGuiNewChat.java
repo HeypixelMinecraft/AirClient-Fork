@@ -138,10 +138,21 @@ public abstract class MixinGuiNewChat {
 
                 float f1 = this.getChatScale();
                 int l = MathHelper.ceiling_float_int((float) this.getChatWidth() / f1);
+                ScaledResolution sr = new ScaledResolution(mc);
+                int chatY = sr.getScaledHeight() - 40;
+
+                // ChatBlur: 在绘制聊天文字之前应用模糊（基于 scissor，无 stencil）
+                // 必须在绘制聊天文字之前应用，否则模糊会覆盖文字
+                if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatBlur()) {
+                    int chatHeight = (int) (i * 9 * f1);
+                    int chatRight = (int) (2 + (l + 4) * f1);
+                    HUD.INSTANCE.drawChatBlur(2, chatY - chatHeight, chatRight, chatY);
+                }
+
                 GlStateManager.pushMatrix();
                 if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatAnimation())
                     GlStateManager.translate(0F, (1F - animationPercent) * 9F * this.getChatScale(), 0F);
-                GlStateManager.translate(2.0F, 20.0F, 0.0F);
+                GlStateManager.translate(2.0F, (float) chatY, 0.0F);
                 GlStateManager.scale(f1, f1, 1.0F);
 
                 int i1;
@@ -170,7 +181,8 @@ public abstract class MixinGuiNewChat {
                                 int i2 = 0;
                                 int j2 = -i1 * 9;
 
-                                if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatRect()) {
+                                // ChatBlur 开启时不绘制逐行背景（由模糊替代）
+                                if (!(HUD.INSTANCE.getState() && HUD.INSTANCE.getChatBlur()) && HUD.INSTANCE.getState() && HUD.INSTANCE.getChatRect()) {
                                     if (HUD.INSTANCE.getChatAnimation() && lineBeingDrawn <= newLines && !flag)
                                         drawRect(i2, j2 - 9, i2 + l + 4, j2, new Color(0F, 0F, 0F, animationPercent * ((float) d0 / 2F)).getRGB());
                                     else

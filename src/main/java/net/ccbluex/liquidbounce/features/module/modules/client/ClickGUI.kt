@@ -61,6 +61,13 @@ object ClickGUI : Module("ClickGUI", Category.CLIENT, Keyboard.KEY_RSHIFT, canBe
     val nlAnimationSpeed by nlAnimationSpeedValue
     val nlGlowIntensity by nlGlowIntensityValue
 
+    // Augustus style settings - 背景模糊
+    val augBlurValue = boolean("AugBlur", true) { style == "Augustus" }
+    val augBlurStrengthValue = float("AugBlurStrength", 12f, 1f..50f) { style == "Augustus" && augBlur }
+
+    val augBlur by augBlurValue
+    val augBlurStrength by augBlurStrengthValue
+
     // Theme presets: each theme has accent color and background color
     val nlAccentColor: Color
         get() = when (nlTheme) {

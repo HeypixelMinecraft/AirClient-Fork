@@ -7,6 +7,7 @@ package net.ccbluex.liquidbounce.features.module.modules.render
 import net.ccbluex.liquidbounce.LiquidBounce.CLIENT_NAME
 import net.ccbluex.liquidbounce.event.JumpEvent
 import net.ccbluex.liquidbounce.event.Render3DEvent
+import net.ccbluex.liquidbounce.event.WorldEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
@@ -34,6 +35,7 @@ import net.minecraft.util.ResourceLocation
 import net.minecraft.util.Vec3
 import org.lwjgl.opengl.GL11.*
 import java.awt.Color
+import java.util.concurrent.CopyOnWriteArrayList
 
 object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false) {
     private val colorMode by choices("Color", arrayOf("Custom", "Theme"), "Theme")
@@ -54,7 +56,7 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
     private val supernaturalIcon = ResourceLocation("$staticLoc/circle2.png")
 
     private val animatedGroups = listOf(mutableListOf<ResourceLocation>(), mutableListOf())
-    private val circles = mutableListOf<JumpData>()
+    private val circles: MutableList<JumpData> = CopyOnWriteArrayList()
     private var hasJumped = false
 
     private val tessellator = Tessellator.getInstance()
@@ -161,6 +163,10 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
     }
 
     override fun onDisable() {
+        circles.clear()
+    }
+
+    val onWorld = handler<WorldEvent> {
         circles.clear()
     }
 

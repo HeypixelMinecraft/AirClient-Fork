@@ -536,7 +536,27 @@
 
         "module.killEffectV2.description":"击杀特效V2",
 
-        "module.webGui.description":"网页GUI"
+        "module.webGui.description":"网页GUI",
+
+        "module.autoBuff.description":"自动使用增益药水",
+
+        "module.autoTrap.description":"自动在目标周围放置方块困住敌人",
+
+        "module.blockHit.description":"攻击后自动持剑格挡",
+
+        "module.blockHit2.description":"攻击后格挡",
+
+        "module.smartAttack.description":"智能取消攻击",
+
+        "module.autoBlockIn.description":"自动用方块包围自身进行防御",
+
+        "module.inventoryClicker.description":"GUI容器中按住左键自动连点",
+
+        "module.betterFPS.description":"跳过强制GC以减少加载卡顿",
+
+        "module.memoryHUD.description":"显示内存使用情况",
+
+        "module.airi.description":"AI助手"
 
     }
 }

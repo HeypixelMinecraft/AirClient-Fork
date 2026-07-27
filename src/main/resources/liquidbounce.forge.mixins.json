@@ -71,6 +71,7 @@
     "render.MixinVisGraph",
     "resources.MixinSkinManager",
     "splash.MixinSplashProgress",
+    "splash.MixinSplashProgressRunnable",
     "tweaks.MixinAnvilChunkLoader",
     "tweaks.MixinMinecraftServer",
     "world.MixinChunk",

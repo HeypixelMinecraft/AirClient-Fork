@@ -5,6 +5,7 @@
 package net.ccbluex.liquidbounce.injection.forge.mixins.gui;
 
 import net.ccbluex.liquidbounce.features.command.CommandManager;
+import net.ccbluex.liquidbounce.features.module.modules.render.HUD;
 import net.ccbluex.liquidbounce.file.FileManager;
 import net.ccbluex.liquidbounce.ui.font.AWTFontRenderer;
 import net.ccbluex.liquidbounce.utils.render.RenderUtils;
@@ -146,7 +147,12 @@ public abstract class MixinGuiChat extends MixinGuiScreen {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         AWTFontRenderer.Companion.setAssumeNonVolatile(true);
 
-        Gui.drawRect(2, height - (int) fade, width - 2, height, Integer.MIN_VALUE);
+        if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatBlur()) {
+            // 基于 scissor 的模糊，确保输入框文字绘制在模糊背景之上
+            HUD.INSTANCE.drawChatBlur(2, height - (int) fade, width - 2, height);
+        } else {
+            Gui.drawRect(2, height - (int) fade, width - 2, height, Integer.MIN_VALUE);
+        }
         inputField.drawTextBox();
 
         if (CommandManager.INSTANCE.getLatestAutoComplete().length > 0 && !inputField.getText().isEmpty() && inputField.getText().startsWith(String.valueOf(CommandManager.INSTANCE.getPrefix()))) {

@@ -56,6 +56,7 @@ object CommandManager {
         registerCommand(XrayCommand)
         registerCommand(TeleportCommand)
         registerCommand(MusicCommand)
+        registerCommand(AiriCommand)
     }
 
     /**

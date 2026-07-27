@@ -190,6 +190,12 @@ object GameTickEvent : Event()
 object TickEndEvent : Event()
 
 /**
+ * Called after dispatchKeypresses() in runTick(), before sendClickBlockToController.
+ * This is the correct timing for simulated key input.
+ */
+object PostInputEvent : Event()
+
+/**
  * tick tack for player
  */
 class PlayerTickEvent(val state: EventState) : CancellableEvent()
@@ -256,6 +262,7 @@ internal val ALL_EVENT_CLASSES = arrayOf(
     MoveEvent::class.java,
     ClientShutdownEvent::class.java,
     GameTickEvent::class.java,
+    PostInputEvent::class.java,
     StepEvent::class.java,
     BlockBBEvent::class.java,
     ClickBlockEvent::class.java,

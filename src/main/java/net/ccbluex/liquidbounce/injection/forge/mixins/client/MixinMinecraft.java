@@ -10,6 +10,7 @@ import net.ccbluex.liquidbounce.features.module.modules.combat.AutoClicker;
 import net.ccbluex.liquidbounce.features.module.modules.combat.TickBase;
 import net.ccbluex.liquidbounce.features.module.modules.exploit.AbortBreaking;
 import net.ccbluex.liquidbounce.features.module.modules.exploit.MultiActions;
+import net.ccbluex.liquidbounce.features.module.modules.render.BetterFPS;
 import net.ccbluex.liquidbounce.features.module.modules.world.FastPlace;
 import net.ccbluex.liquidbounce.file.configs.models.ClientConfiguration;
 import net.ccbluex.liquidbounce.injection.forge.SplashProgressLock;
@@ -195,6 +196,8 @@ public abstract class MixinMinecraft {
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;dispatchKeypresses()V", shift = At.Shift.AFTER))
     private void onKey(CallbackInfo callbackInfo) {
+        // 在 dispatchKeypresses 之后触发 PostInputEvent (模拟按键的最佳时机)
+        EventManager.INSTANCE.call(PostInputEvent.INSTANCE);
         if (Keyboard.getEventKeyState() && currentScreen == null)
             EventManager.INSTANCE.call(new KeyEvent(Keyboard.getEventKey() == 0 ? Keyboard.getEventCharacter() + 256 : Keyboard.getEventKey()));
     }
@@ -274,6 +277,22 @@ public abstract class MixinMinecraft {
         }
 
         EventManager.INSTANCE.call(new WorldEvent(p_loadWorld_1_));
+    }
+
+    // skid Leader-Lite: Skip forced System.gc() during world load / integrated server launch
+    // when BetterFPS + FastLoad is enabled, to reduce load-time stutter.
+    @Redirect(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V", at = @At(value = "INVOKE", target = "Ljava/lang/System;gc()V"))
+    private void redirectLoadWorldGc() {
+        if (!BetterFPS.INSTANCE.getUsing() || !BetterFPS.INSTANCE.getFastLoad()) {
+            System.gc();
+        }
+    }
+
+    @Redirect(method = "launchIntegratedServer", at = @At(value = "INVOKE", target = "Ljava/lang/System;gc()V"))
+    private void redirectLaunchIntegratedServerGc() {
+        if (!BetterFPS.INSTANCE.getUsing() || !BetterFPS.INSTANCE.getFastLoad()) {
+            System.gc();
+        }
     }
 
 

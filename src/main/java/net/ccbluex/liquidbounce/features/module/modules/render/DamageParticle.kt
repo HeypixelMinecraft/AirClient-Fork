@@ -31,6 +31,8 @@ object DamageParticle : Module("DamageParticle", Category.RENDER) {
     private val healthData = mutableMapOf<Int, Float>()
     private val particles = mutableListOf<SingleParticle>()
     private val MAX_PARTICLES = 200
+    // 复用 Random 实例，避免 onUpdate 每次都 new Random() / new Random(1)
+    private val random = Random.Default
 
     val onUpdate = handler<UpdateEvent> {
         // onUpdate 与 onRender3D 都在主线程执行，无需 synchronized
@@ -54,12 +56,13 @@ object DamageParticle : Module("DamageParticle", Category.RENDER) {
                 val damageAmount = String.format("%.1f", abs((lastHealth - entity.health).toDouble()))
 
                 if (particles.size < MAX_PARTICLES) {
+                    // 用同一个 Random 实例替代原来每次 new Random() / new Random(1)
                     particles.add(
                         SingleParticle(
                             colorPrefix + prefix + damageAmount,
-                            entity.posX - 0.5 + Random.nextInt(5).toDouble() * 0.1,
+                            entity.posX - 0.5 + random.nextInt(5).toDouble() * 0.1,
                             entity.entityBoundingBox.minY + (entity.entityBoundingBox.maxY - entity.entityBoundingBox.minY) / 2.0,
-                            entity.posZ - 0.5 + Random(1).nextInt(5).toDouble() * 0.1
+                            entity.posZ - 0.5 + random.nextInt(5).toDouble() * 0.1
                         )
                     )
                 }

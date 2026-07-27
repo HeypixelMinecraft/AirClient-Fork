@@ -62,6 +62,9 @@ object InternalBlurShader {
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, 33071)
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, 33071)
 
+        // Save GL state before modifying blend/alpha
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT or GL11.GL_CURRENT_BIT)
+
         // Enable blending when writing back to main buffer to preserve transparency
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -70,9 +73,10 @@ object InternalBlurShader {
         GL20.glUniform2f(uniformDirectionLocation, 0.0f, 1.0f)
         drawQuads()
 
-        glEnable(GL_ALPHA_TEST)
-
         GL20.glUseProgram(0)
+
+        // Restore GL state
+        GL11.glPopAttrib()
 
         GL11.glMatrixMode(GL11.GL_PROJECTION)
         GL11.glPopMatrix()

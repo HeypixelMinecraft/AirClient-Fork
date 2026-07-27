@@ -7,7 +7,10 @@ package net.ccbluex.liquidbounce.utils.client
 import net.ccbluex.liquidbounce.utils.attack.RollingArrayLongBuffer
 
 object PPSCounter {
-    private val TIMESTAMP_BUFFERS = Array(PacketType.entries.size) { RollingArrayLongBuffer(99999) }
+    // 缓冲区容量从 99999 调整为 1000：每秒最多记录 1000 个包已足够覆盖极端 burst，
+    // 同时将常驻内存占用从 ~1.6MB（2 × 99999 × 8B）降到 ~16KB。
+    private const val BUFFER_CAPACITY = 1000
+    private val TIMESTAMP_BUFFERS = Array(PacketType.entries.size) { RollingArrayLongBuffer(BUFFER_CAPACITY) }
 
     /**
      * Registers a packet type

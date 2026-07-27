@@ -35,6 +35,8 @@ import net.ccbluex.liquidbounce.utils.rotation.RotationUtils.toRotation
 import net.ccbluex.liquidbounce.utils.simulation.SimulatedPlayer
 import net.ccbluex.liquidbounce.utils.timing.*
 import net.minecraft.block.BlockBush
+import net.minecraft.client.gui.ScaledResolution
+import net.minecraft.client.renderer.GlStateManager
 import net.minecraft.client.settings.GameSettings
 import net.minecraft.init.Blocks.air
 import net.minecraft.item.ItemBlock
@@ -159,7 +161,7 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
 
     // Rotation Options
     private val modeList =
-        choices("Rotations", arrayOf("Off", "Normal", "Stabilized", "ReverseYaw", "GodBridge"), "Normal")
+        choices("Rotations", arrayOf("Off", "Normal", "Stabilized", "ReverseYaw", "GodBridge", "Backwards"), "Normal")
 
     private val options = RotationSettingsWithRotationModes(this, modeList).apply {
         strictValue.excludeWithState()
@@ -222,6 +224,9 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
     private val markBlue by int("Mark-B", 255, 0..255) { mark }
     private val markAlpha by int("Mark-Alpha", 100, 0..255) { mark }
     private val trackCPS by boolean("TrackCPS", false).subjective()
+    // skid Leader-Lite: Render BPS bar
+    private val bPSRender by boolean("RenderBPS", true).subjective()
+    private val bpsLimit by float("BPSLimit", 5.92f, 1f..20f).subjective()
 
     // Target placement
     var placeRotation: PlaceRotation? = null
@@ -237,6 +242,11 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
 
     // Zitter
     private var zitterDirection = false
+
+    // skid Leader-Lite: BPS tracking for RenderBPS
+    private var prevBpsX = 0.0
+    private var prevBpsZ = 0.0
+    private var currentBps = 0f
 
     // Delay
     private val delayTimer = object : DelayTimer(delay.first, delay.last, MSTimer()) {
@@ -316,6 +326,11 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
         blocksUntilAxisChange = 0
         earlyRotationActive = false
 
+        // skid Leader-Lite: init BPS tracking
+        prevBpsX = player.posX
+        prevBpsZ = player.posZ
+        currentBps = 0f
+
         if (earlyRotation && options.rotationsActive) {
             earlyRotationActive = true
         }
@@ -328,6 +343,13 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
         if (mc.playerController.currentGameType == WorldSettings.GameType.SPECTATOR) return@loopSequence
 
         mc.timer.timerSpeed = timer
+
+        // skid Leader-Lite: update BPS measurement (blocks per second)
+        val dx = player.posX - prevBpsX
+        val dz = player.posZ - prevBpsZ
+        currentBps = (sqrt(dx * dx + dz * dz) * 20.0).toFloat()
+        prevBpsX = player.posX
+        prevBpsZ = player.posZ
 
         // Telly
         if (player.onGround) ticksUntilJump++
@@ -675,7 +697,9 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
         }
 
         raycast.let {
-            if (!options.rotationsActive || it != null && it.blockPos == target.blockPos && (!raycastProperly || it.sideHit == target.enumFacing)) {
+            // skid Leader-Lite: Backwards mode skips raytrace validation since visual rotation faces away from target
+            val skipRaycastCheck = options.rotationMode == "Backwards"
+            if (!options.rotationsActive || skipRaycastCheck || it != null && it.blockPos == target.blockPos && (!raycastProperly || it.sideHit == target.enumFacing)) {
                 val result = if (raycastProperly && it != null) {
                     PlaceInfo(it.blockPos, it.sideHit, it.hitVec)
                 } else {
@@ -1004,6 +1028,62 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
         }
     }
 
+    // skid Leader-Lite: BPS progress bar (2D overlay)
+    val onRender2D = handler<Render2DEvent> {
+        if (!bPSRender) return@handler
+
+        val sr = ScaledResolution(mc)
+        val barWidth = 100
+        val barHeight = 4
+        val barX = sr.scaledWidth / 2 - barWidth / 2
+        val barY = (sr.scaledHeight / 2f).toInt()
+        val maxDisplayBps = 10.0f
+        val limit = bpsLimit
+        val fillWidth = min(barWidth.toFloat(), (currentBps / maxDisplayBps) * barWidth)
+
+        GlStateManager.pushMatrix()
+        RenderUtils.drawRect(
+            barX.toFloat(), barY.toFloat(), (barX + barWidth).toFloat(), (barY + barHeight).toFloat(),
+            Color(0, 0, 0, 120).rgb
+        )
+        val fgColor = if (currentBps > limit) {
+            Color(255, 50, 50, 200).rgb
+        } else {
+            Color(0, 200, 255, 200).rgb
+        }
+        RenderUtils.drawRect(
+            barX.toFloat(), barY.toFloat(), barX + fillWidth, (barY + barHeight).toFloat(),
+            fgColor
+        )
+        val markerX = barX + (limit / maxDisplayBps) * barWidth
+        RenderUtils.drawRect(
+            markerX - 0.5f, (barY - 2).toFloat(), markerX + 0.5f, (barY + barHeight + 2).toFloat(),
+            Color(255, 255, 255, 255).rgb
+        )
+        GlStateManager.disableDepth()
+        val limitLabel = String.format("%.2f", limit)
+        mc.fontRendererObj.drawStringWithShadow(
+            limitLabel,
+            markerX - mc.fontRendererObj.getStringWidth(limitLabel) / 2f,
+            (barY - 12).toFloat(),
+            -1
+        )
+        val bpsText = String.format("%.2f BPS", currentBps)
+        mc.fontRendererObj.drawStringWithShadow(bpsText, (barX + barWidth + 2).toFloat(), (barY - 2).toFloat(), -1)
+        // skid Leader-Lite: overspeed warning
+        if (currentBps > limit) {
+            val warningText = "§c您已超速，要被狗咬了"
+            mc.fontRendererObj.drawStringWithShadow(
+                warningText,
+                (sr.scaledWidth / 2f - mc.fontRendererObj.getStringWidth(warningText) / 2f),
+                (barY + barHeight + 4).toFloat(),
+                -1
+            )
+        }
+        GlStateManager.enableDepth()
+        GlStateManager.popMatrix()
+    }
+
     /**
      * Search for placeable block
      *
@@ -1072,6 +1152,17 @@ object Scaffold : Module("Scaffold", Category.WORLD, Keyboard.KEY_I) {
         placeRotation ?: return false
 
         if (options.rotationsActive && !isGodBridgeEnabled) {
+            // skid Leader-Lite: Backwards rotation mode - invert yaw based on movement input, pitch fixed at 85.
+            if (options.rotationMode == "Backwards") {
+                val moveDirectionYaw = MovementUtils.direction.toDegreesF()
+                val backwardsYaw = MathHelper.wrapAngleTo180_float(moveDirectionYaw + 180f)
+                val backwardsRotation = Rotation(backwardsYaw, 85f).fixedSensitivity()
+
+                setRotation(backwardsRotation, if (scaffoldMode == "Telly") 1 else options.resetTicks)
+                this.placeRotation = PlaceRotation(placeRotation.placeInfo, backwardsRotation)
+                return true
+            }
+
             val rotationDifference = rotationDifference(placeRotation.rotation, currRotation)
             val rotationDifference2 = rotationDifference(placeRotation.rotation / 90F, currRotation / 90F)
 

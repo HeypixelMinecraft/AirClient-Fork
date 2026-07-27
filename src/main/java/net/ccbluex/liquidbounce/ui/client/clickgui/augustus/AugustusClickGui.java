@@ -8,14 +8,18 @@ package net.ccbluex.liquidbounce.ui.client.clickgui.augustus;
 import net.ccbluex.liquidbounce.LiquidBounce;
 import net.ccbluex.liquidbounce.config.BoolValue;
 import net.ccbluex.liquidbounce.config.ColorValue;
+import net.ccbluex.liquidbounce.config.FloatRangeValue;
 import net.ccbluex.liquidbounce.config.FloatValue;
+import net.ccbluex.liquidbounce.config.IntRangeValue;
 import net.ccbluex.liquidbounce.config.IntValue;
 import net.ccbluex.liquidbounce.config.ListValue;
 import net.ccbluex.liquidbounce.config.TextValue;
 import net.ccbluex.liquidbounce.config.Value;
 import net.ccbluex.liquidbounce.features.module.Category;
 import net.ccbluex.liquidbounce.features.module.Module;
+import net.ccbluex.liquidbounce.features.module.modules.client.ClickGUI;
 import net.ccbluex.liquidbounce.ui.font.Fonts;
+import net.ccbluex.liquidbounce.utils.render.BlurUtils;
 import net.ccbluex.liquidbounce.utils.render.RenderUtils;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
@@ -58,6 +62,11 @@ public class AugustusClickGui extends GuiScreen {
     public static float lastPosY = -1337F;
     public static float lastWidth = 500F;
     public static float lastHeight = 250F;
+    // 保存上次关闭时的状态,下次打开时恢复
+    private static Category lastSelectedCategory = Category.COMBAT;
+    private static String lastSelectedModuleName = null;
+    private static float lastModuleScroll = 0F;
+    private static float lastValueScroll = 0F;
 
     private float posX;
     private float posY;
@@ -80,9 +89,14 @@ public class AugustusClickGui extends GuiScreen {
 
     private FloatValue draggingFloat;
     private IntValue draggingInt;
+    // 双滑块拖动状态: draggingRangeValue 指向被拖动的 RangeValue,draggingRangeThumb 标识哪个滑块 ("first" | "last")
+    private Value<?> draggingRangeValue;
+    private String draggingRangeThumb;
 
     private final Map<TextValue, GuiTextField> textFields = new HashMap<>();
     private final Map<Value<?>, Float> animatedSliders = new HashMap<>();
+    private final Map<Value<?>, Float> animatedRangeFirst = new HashMap<>();
+    private final Map<Value<?>, Float> animatedRangeLast = new HashMap<>();
     private final Map<ColorValue, ColorPickerState> colorPickerStates = new HashMap<>();
 
     public AugustusClickGui() {
@@ -94,6 +108,13 @@ public class AugustusClickGui extends GuiScreen {
             posY = lastPosY;
             width = lastWidth;
             height = lastHeight;
+        }
+        // 恢复上次关闭时的状态
+        selectedCategory = lastSelectedCategory;
+        moduleScroll = lastModuleScroll;
+        valueScroll = lastValueScroll;
+        if (lastSelectedModuleName != null) {
+            selectedModule = LiquidBounce.INSTANCE.getModuleManager().getModule(lastSelectedModuleName);
         }
     }
 
@@ -162,6 +183,11 @@ public class AugustusClickGui extends GuiScreen {
         lastPosY = posY;
         lastWidth = width;
         lastHeight = height;
+        // 保存当前状态,下次打开时恢复
+        lastSelectedCategory = selectedCategory;
+        lastSelectedModuleName = selectedModule != null ? selectedModule.getName() : null;
+        lastModuleScroll = moduleScroll;
+        lastValueScroll = valueScroll;
         super.onGuiClosed();
     }
 
@@ -176,6 +202,8 @@ public class AugustusClickGui extends GuiScreen {
             resizing = false;
             draggingFloat = null;
             draggingInt = null;
+            draggingRangeValue = null;
+            draggingRangeThumb = null;
             for (ColorPickerState state : colorPickerStates.values()) {
                 state.draggingColor = false;
                 state.draggingHue = false;
@@ -211,6 +239,11 @@ public class AugustusClickGui extends GuiScreen {
 
     private void drawMainWindow(int mouseX, int mouseY, int mouseButton, GuiEvent event) {
         if (event == GuiEvent.DRAW) {
+            // 背景模糊 (在背景圆角区域应用 BlurUtils,半透明背景会让模糊透出)
+            if (ClickGUI.INSTANCE.getAugBlur()) {
+                BlurUtils.blurAreaRounded(posX, posY, posX + width, posY + height, 12F, ClickGUI.INSTANCE.getAugBlurStrength());
+            }
+            // 原有背景与分隔线
             drawRounded(posX, posY, width, height, 12F, new Color(25, 25, 25, 190).getRGB());
             drawRect(posX, posY, width, 18F, new Color(34, 34, 34, 230).getRGB());
             drawTitle("CLICKGUI", posX + 6F, posY + 6F, new Color(220, 220, 220).getRGB());
@@ -433,6 +466,47 @@ public class AugustusClickGui extends GuiScreen {
             return y + normalHeight() + 6F;
         }
 
+        if (value instanceof IntRangeValue) {
+            IntRangeValue rangeValue = (IntRangeValue) value;
+            float sliderX = x + normalWidth(value.getName() + ": ") + 4F;
+            float sliderW = 98F;
+            int first = rangeValue.get().getFirst();
+            int last = rangeValue.get().getLast();
+            int min = rangeValue.getMinimum();
+            int max = rangeValue.getMaximum();
+            drawRangeSlider(value, y, sliderX, sliderW, first, last, min, max, event);
+            if (event == GuiEvent.CLICK && mouseButton == 0 && hovered(mouseX, mouseY, sliderX, y - 4F, sliderW, 10F)) {
+                // 判断离哪个滑块更近
+                float progress = ((mouseX - sliderX) / sliderW) * (max - min) + min;
+                int distFirst = Math.abs((int) progress - first);
+                int distLast = Math.abs((int) progress - last);
+                draggingRangeValue = rangeValue;
+                draggingRangeThumb = distFirst <= distLast ? "first" : "last";
+                updateIntRange(mouseX, sliderX, sliderW, rangeValue);
+            }
+            return y + normalHeight() + 6F;
+        }
+
+        if (value instanceof FloatRangeValue) {
+            FloatRangeValue rangeValue = (FloatRangeValue) value;
+            float sliderX = x + normalWidth(value.getName() + ": ") + 4F;
+            float sliderW = 98F;
+            float first = rangeValue.get().getStart();
+            float last = rangeValue.get().getEndInclusive();
+            float min = rangeValue.getMinimum();
+            float max = rangeValue.getMaximum();
+            drawRangeSlider(value, y, sliderX, sliderW, first, last, min, max, event);
+            if (event == GuiEvent.CLICK && mouseButton == 0 && hovered(mouseX, mouseY, sliderX, y - 4F, sliderW, 10F)) {
+                float progress = ((mouseX - sliderX) / sliderW) * (max - min) + min;
+                float distFirst = Math.abs(progress - first);
+                float distLast = Math.abs(progress - last);
+                draggingRangeValue = rangeValue;
+                draggingRangeThumb = distFirst <= distLast ? "first" : "last";
+                updateFloatRange(mouseX, sliderX, sliderW, rangeValue);
+            }
+            return y + normalHeight() + 6F;
+        }
+
         if (value instanceof ListValue) {
             ListValue listValue = (ListValue) value;
             float modeX = x + normalWidth(value.getName() + ": ");
@@ -547,6 +621,43 @@ public class AugustusClickGui extends GuiScreen {
         drawNormal(valueText, sliderX + sliderWidth / 2F - normalWidth(valueText) / 2F, y - 1F, new Color(230, 230, 230).getRGB());
     }
 
+    /**
+     * 绘制双滑块 (RangeValue): 与普通滑块样式一致,accent 填充区间从 first 到 last
+     */
+    private void drawRangeSlider(Value<?> value, float y, float sliderX, float sliderWidth,
+                                 double first, double last, double min, double max, GuiEvent event) {
+        if (event != GuiEvent.DRAW) return;
+
+        float x = posX + 100F;
+        drawNormal(value.getName() + ": ", x, y, new Color(200, 200, 200).getRGB());
+
+        double range = max - min;
+        double targetFirst = range == 0D ? 0D : Math.max(0D, Math.min(sliderWidth, (first - min) / range * sliderWidth));
+        double targetLast = range == 0D ? 0D : Math.max(0D, Math.min(sliderWidth, (last - min) / range * sliderWidth));
+
+        // 动画插值
+        float animFirst = animatedRangeFirst.getOrDefault(value, (float) targetFirst);
+        float animLast = animatedRangeLast.getOrDefault(value, (float) targetLast);
+        animFirst += ((float) targetFirst - animFirst) * 0.35F;
+        animLast += ((float) targetLast - animLast) * 0.35F;
+        animatedRangeFirst.put(value, animFirst);
+        animatedRangeLast.put(value, animLast);
+
+        // 轨道背景 (与普通滑块一致)
+        drawRect(sliderX, y - 3F, sliderWidth + 1F, 10F, new Color(34, 34, 34).getRGB());
+        // accent 色填充区间 (与普通滑块完全一致: 从 sliderX+1+animFirst 到 sliderX+animLast)
+        float fillStart = sliderX + 1F + animFirst;
+        float fillEnd = sliderX + animLast;
+        float fillW = Math.max(0F, fillEnd - fillStart);
+        drawRect(fillStart, y - 2F, fillW, 8F, accent().getRGB());
+
+        // 显示数值文本
+        String firstText = first == Math.rint(first) ? String.valueOf((int) first) : String.valueOf(Math.round(first * 100D) / 100D);
+        String lastText = last == Math.rint(last) ? String.valueOf((int) last) : String.valueOf(Math.round(last * 100D) / 100D);
+        String valueText = firstText + ".." + lastText;
+        drawNormal(valueText, sliderX + sliderWidth / 2F - normalWidth(valueText) / 2F, y - 1F, new Color(230, 230, 230).getRGB());
+    }
+
     private void updateDraggingValues(int mouseX, int mouseY) {
         if (draggingFloat != null && Mouse.isButtonDown(0)) {
             float sliderX = posX + 100F + normalWidth(draggingFloat.getName() + ": ") + 4F;
@@ -555,6 +666,14 @@ public class AugustusClickGui extends GuiScreen {
         if (draggingInt != null && Mouse.isButtonDown(0)) {
             float sliderX = posX + 100F + normalWidth(draggingInt.getName() + ": ") + 4F;
             updateInt(mouseX, sliderX, 98F, draggingInt);
+        }
+        if (draggingRangeValue != null && Mouse.isButtonDown(0)) {
+            float sliderX = posX + 100F + normalWidth(draggingRangeValue.getName() + ": ") + 4F;
+            if (draggingRangeValue instanceof IntRangeValue) {
+                updateIntRange(mouseX, sliderX, 98F, (IntRangeValue) draggingRangeValue);
+            } else if (draggingRangeValue instanceof FloatRangeValue) {
+                updateFloatRange(mouseX, sliderX, 98F, (FloatRangeValue) draggingRangeValue);
+            }
         }
         for (Map.Entry<ColorValue, ColorPickerState> entry : colorPickerStates.entrySet()) {
             ColorValue value = entry.getKey();
@@ -565,6 +684,99 @@ public class AugustusClickGui extends GuiScreen {
                 updateHue(mouseX, value, state);
             } else if (state.draggingOpacity && Mouse.isButtonDown(0)) {
                 updateOpacity(mouseX, value, state);
+            }
+        }
+    }
+
+    /**
+     * 更新 IntRangeValue 双滑块: 拖动 first 时若超过 last 则联动推进 last,反之亦然
+     */
+    private void updateIntRange(int mouseX, float sliderX, float sliderWidth, IntRangeValue value) {
+        int min = value.getMinimum();
+        int max = value.getMaximum();
+        double raw = (mouseX - sliderX) * (max - min) / sliderWidth + min;
+        int v = (int) MathHelper.clamp_double(Math.round(raw), min, max);
+        int currentFirst = value.get().getFirst();
+        int currentLast = value.get().getLast();
+        if ("first".equals(draggingRangeThumb)) {
+            if (v > currentLast) {
+                // first 推过 last: 先把 last 提到 v,再设 first (避免 IntRange first>last 异常)
+                value.setLast(v, false);
+                value.setFirst(v, true);
+            } else {
+                value.setFirst(v, true);
+            }
+        } else if ("last".equals(draggingRangeThumb)) {
+            if (v < currentFirst) {
+                // last 推过 first: 先把 first 降到 v,再设 last
+                value.setFirst(v, false);
+                value.setLast(v, true);
+            } else {
+                value.setLast(v, true);
+            }
+        } else {
+            // 未指定 thumb: 按距离判断
+            int distFirst = Math.abs(v - currentFirst);
+            int distLast = Math.abs(v - currentLast);
+            if (distFirst <= distLast) {
+                if (v > currentLast) {
+                    value.setLast(v, false);
+                    value.setFirst(v, true);
+                } else {
+                    value.setFirst(v, true);
+                }
+            } else {
+                if (v < currentFirst) {
+                    value.setFirst(v, false);
+                    value.setLast(v, true);
+                } else {
+                    value.setLast(v, true);
+                }
+            }
+        }
+    }
+
+    /**
+     * 更新 FloatRangeValue 双滑块: 同样支持联动
+     */
+    private void updateFloatRange(int mouseX, float sliderX, float sliderWidth, FloatRangeValue value) {
+        float min = value.getMinimum();
+        float max = value.getMaximum();
+        double raw = (mouseX - sliderX) * (max - min) / sliderWidth + min;
+        float v = (float) MathHelper.clamp_double(raw, min, max);
+        float currentStart = value.get().getStart();
+        float currentEnd = value.get().getEndInclusive();
+        if ("first".equals(draggingRangeThumb)) {
+            if (v > currentEnd) {
+                value.setLast(v, false);
+                value.setFirst(v, true);
+            } else {
+                value.setFirst(v, true);
+            }
+        } else if ("last".equals(draggingRangeThumb)) {
+            if (v < currentStart) {
+                value.setFirst(v, false);
+                value.setLast(v, true);
+            } else {
+                value.setLast(v, true);
+            }
+        } else {
+            float distFirst = Math.abs(v - currentStart);
+            float distLast = Math.abs(v - currentEnd);
+            if (distFirst <= distLast) {
+                if (v > currentEnd) {
+                    value.setLast(v, false);
+                    value.setFirst(v, true);
+                } else {
+                    value.setFirst(v, true);
+                }
+            } else {
+                if (v < currentStart) {
+                    value.setFirst(v, false);
+                    value.setLast(v, true);
+                } else {
+                    value.setLast(v, true);
+                }
             }
         }
     }

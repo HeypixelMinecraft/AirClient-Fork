@@ -37,12 +37,18 @@ class AWTFontRenderer(
         var assumeNonVolatile: Boolean = false
 
         private val activeFontRenderers = mutableListOf<AWTFontRenderer>()
-        
-        private val chineseFallbackFonts = mutableMapOf<Int, Font>()
-        
+
+        // 限制为 LRU，避免不同 size 缓存无限增长（每个 size 都会触发一次 Font 构造，长期占用内存）
+        private const val MAX_FALLBACK_FONTS = 32
+        private val chineseFallbackFonts = object : LinkedHashMap<Int, Font>(MAX_FALLBACK_FONTS, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Font>): Boolean {
+                return size > MAX_FALLBACK_FONTS
+            }
+        }
+
         private fun getChineseFallbackFont(size: Int): Font? {
             chineseFallbackFonts[size]?.let { return it }
-            
+
             val fallbackFonts = listOf(
                 "Microsoft YaHei",
                 "SimHei",
@@ -52,7 +58,7 @@ class AWTFontRenderer(
                 "WenQuanYi Micro Hei",
                 "SansSerif"
             )
-            
+
             for (fallbackName in fallbackFonts) {
                 try {
                     val fallbackFont = Font(fallbackName, Font.PLAIN, size)

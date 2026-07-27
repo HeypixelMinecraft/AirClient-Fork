@@ -71,6 +71,11 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             AutoArmor,
             ArmorBreaker,
             AutoBow,
+            AutoBuff,
+            AutoTrap,
+            BlockHit,
+            BlockHit2,
+            SmartAttack,
             AutoBreak,
             AutoClicker,
             AutoDisable,
@@ -84,6 +89,8 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             AutoSoup,
             AutoTool,
             AutoWalk,
+            AutoBlockIn,
+            InventoryClicker,
             AutoWeapon,
             AvoidHazards,
             Backtrack,
@@ -92,6 +99,7 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             BedGodMode,
             BedPlates,
             BedProtectionESP,
+            BetterFPS,
             Blink,
             BlockESP,
             BlockOverlay,
@@ -244,6 +252,7 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             ClientFixes,
             MoreKB,
             WTap,
+            MemoryHUD,
             TPAura,
             Disabler,
             OverrideRaycast,
@@ -278,7 +287,8 @@ object ModuleManager : Listenable, Collection<Module> by MODULE_REGISTRY {
             AntiKnockBack,
             KillEffect,
             KillEffectV2,
-            WebGUI
+            WebGUI,
+            Airi
         )
 
         registerModules(modules = modules)

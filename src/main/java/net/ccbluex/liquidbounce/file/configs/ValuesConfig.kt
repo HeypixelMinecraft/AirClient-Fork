@@ -121,6 +121,9 @@ class ValuesConfig(file: File) : FileConfig(file) {
 
         jsonObject.add(ClientConfiguration.name, ClientConfiguration.toJson())
 
+        // 同步保存启动背景选择到 splash.json，供下次启动时 MixinSplashProgress 读取
+        ClientConfiguration.saveSplashConfig()
+
         for (module in moduleManager) {
             if (module.values.isEmpty()) continue
 

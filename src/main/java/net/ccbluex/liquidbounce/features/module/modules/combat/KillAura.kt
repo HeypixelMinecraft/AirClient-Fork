@@ -145,12 +145,12 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     private val onDestroyBlock by boolean("OnDestroyBlock", false)
 
     // AutoBlock
-    val autoBlock by choices("AutoBlock", arrayOf("Off", "Packet", "Fake", "QuickMacro", "BlockOnNoHit", "HurtTime"), "Packet")
+    val autoBlock by choices("AutoBlock", arrayOf("Off", "Packet", "Fake", "QuickMacro", "BlockOnNoHit", "HurtTime", "Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag"), "Packet")
     private val blockMaxRange by float("BlockMaxRange", 3f, 0f..8f) { autoBlock == "Packet" || autoBlock == "QuickMacro" }
     private val unblockMode by choices(
         "UnblockMode", arrayOf("Stop", "Switch", "Empty"), "Stop"
     ) { autoBlock == "Packet" || autoBlock == "QuickMacro" || autoBlock == "HurtTime" }
-    private val releaseAutoBlock by boolean("ReleaseAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake", "BlockOnNoHit", "HurtTime") }
+    private val releaseAutoBlock by boolean("ReleaseAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake", "BlockOnNoHit", "HurtTime", "Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag") }
     val forceBlockRender by boolean("ForceBlockRender", true) {
         autoBlock !in arrayOf(
             "Off", "Fake"
@@ -158,10 +158,33 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     }
     private val ignoreTickRule by boolean("IgnoreTickRule", false) {
         autoBlock !in arrayOf(
-            "Off", "Fake", "HurtTime"
+            "Off", "Fake", "HurtTime", "Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag"
         ) && releaseAutoBlock
     }
-    private val blockRate by int("BlockRate", 100, 1..100) { autoBlock !in arrayOf("Off", "Fake", "HurtTime") && releaseAutoBlock }
+    private val blockRate by int("BlockRate", 100, 1..100) { autoBlock !in arrayOf("Off", "Fake", "HurtTime", "Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag") && releaseAutoBlock }
+
+    // ===== Leader-Lite AutoBlock 模式属性 =====
+    // Hypixel 模式: 控制 NoSwap 与 MoreAttack
+    private val noStop by boolean("NoSwap", true) { autoBlock == "Hypixel" }
+    private val moreAttack by boolean("MoreAttack", false) {
+        autoBlock == "Hypixel" || autoBlock == "HypixelNoSlow"
+    }
+    private val moreAttackDelay by int("MoreAttackDelay", 1, 0..3) {
+        (autoBlock == "Hypixel" || autoBlock == "HypixelNoSlow") && moreAttack
+    }
+    // HypixelLag 模式: 总是渲染格挡
+    private val alwaysRenderBlocking by boolean("AlwaysRenderBlocking", true) { autoBlock == "HypixelLag" }
+    // HypixelCustom 模式: 自定义 tick 序列
+    private val maxTickCustom by int("MaxTick", 3, 1..5) { autoBlock == "HypixelCustom" }
+    private val startBlinkTickCustom by int("StartBlinkTick", 0, 1..5) { autoBlock == "HypixelCustom" }
+    private val stopBlinkTickCustom by int("StopBlinkTick", 2, 1..5) { autoBlock == "HypixelCustom" }
+    private val swapTickCustom by int("SwapTick", 2, 1..5) { autoBlock == "HypixelCustom" }
+    private val switchBackTickCustom by int("SwitchBackTick", 2, 1..5) { autoBlock == "HypixelCustom" }
+    private val stopBlockTickCustom by int("StopBlockTick", 2, 1..5) { autoBlock == "HypixelCustom" }
+    private val attackTickCustom by int("AttackTick", 0, 1..5) { autoBlock == "HypixelCustom" }
+    private val startBlockTickCustom by int("StartBlockTick", 0, 1..5) { autoBlock == "HypixelCustom" }
+    private val postStartBlock by boolean("PostBlock", false) { autoBlock == "HypixelCustom" }
+    // ===== Leader-Lite AutoBlock 模式属性结束 =====
 
     private val uncpAutoBlock by boolean("UpdatedNCPAutoBlock", false) {
         autoBlock !in arrayOf(
@@ -410,6 +433,13 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
     var blockStatus = false
     private var blockStopInDead = false
     private var blockOnNoHitDelayTick = 0
+
+    // ===== Leader-Lite AutoBlock 状态变量 =====
+    private var leaderBlockTick = 0
+    private var leaderTestAttackTick = 0
+    private var leaderSwapped = false
+    private var leaderPostBlock = false
+    // ===== Leader-Lite AutoBlock 状态变量结束 =====
     
     // HurtTime AutoBlock state
     private var hurtTimeBlocking = false
@@ -451,16 +481,22 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
         attackTimer.reset()
         clicks = 0
 
-        if (blinkAutoBlock) {
+        if (blinkAutoBlock || autoBlock in arrayOf("HypixelNoSlow", "HypixelCustom", "HypixelLag")) {
             BlinkUtils.unblink()
             blinked = false
         }
 
         if (autoF5) mc.gameSettings.thirdPersonView = 0
-        
+
         if (autoBlock == "BlockOnNoHit" && blockOnNoHitMode == "RightClick") {
             mc.gameSettings.keyBindUseItem.pressed = GameSettings.isKeyDown(mc.gameSettings.keyBindUseItem)
         }
+
+        // 重置 Leader-Lite 模式状态
+        leaderBlockTick = 0
+        leaderTestAttackTick = 0
+        leaderSwapped = false
+        leaderPostBlock = false
 
         stopBlocking(true)
 
@@ -553,6 +589,14 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
         if (simulateCooldown && getAttackCooldownProgress() < 1f) {
             return@handler
         }
+
+        // ===== Leader-Lite AutoBlock 模式处理 =====
+        // 这些模式拥有独立的状态机，由 handleLeaderLiteAutoBlock 接管 tick 逻辑
+        if (autoBlock in arrayOf("Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag")) {
+            handleLeaderLiteAutoBlock()
+            return@handler
+        }
+        // ===== Leader-Lite AutoBlock 模式处理结束 =====
 
         if (target == null && !blockStopInDead) {
             blockStopInDead = true
@@ -671,6 +715,295 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
             renderBlocking = false
         }
     }
+
+    // ===================== Leader-Lite AutoBlock 模式实现 =====================
+
+    /**
+     * 处理迁移自 Leader-Lite 的 AutoBlock 模式状态机。
+     *
+     * - Vanilla: 持续格挡，仅在玩家主动停止使用物品时取消
+     * - Hypixel: blockTick 状态机 (0->1->2->0)，tick 0 开始格挡，tick 1 不攻击，tick 2 停止格挡 + slot 切换
+     * - Legit: blockTick 0 开始格挡，tick 1 停止格挡 + 不攻击
+     * - HypixelNoSlow: 类似 Hypixel，但 tick 1 进入 blink 而非攻击
+     * - HypixelCustom: 自定义 tick 序列的 blink/swap/block 流程
+     * - HypixelTestA: tick 0 格挡 + slot 切换，tick 1/2 切换槽位
+     * - HypixelLag: tick 0 格挡，tick 1 停止格挡 + 不攻击，tick 2 取消 blink
+     */
+    private fun handleLeaderLiteAutoBlock() {
+        val player = mc.thePlayer ?: return
+        val currentTarget = target
+
+        if (currentTarget == null) {
+            // 无目标：重置状态，停止格挡
+            if (autoBlock == "Hypixel" || autoBlock == "HypixelNoSlow" || autoBlock == "HypixelCustom" || autoBlock == "HypixelLag") {
+                BlinkUtils.unblink()
+                blinked = false
+            }
+            leaderBlockTick = 0
+            leaderTestAttackTick = 0
+            if (leaderSwapped) {
+                sendPacket(C09PacketHeldItemChange(player.inventory.currentItem))
+                leaderSwapped = false
+            }
+            stopBlocking(true)
+            blockStatus = false
+            renderBlocking = false
+            return
+        }
+
+        // 检查目标距离
+        if (player.getDistanceToEntityBox(currentTarget) > blockMaxRange && blockStatus) {
+            stopBlocking(true)
+            return
+        }
+
+        // 仅在持有剑时执行格挡
+        val holdingSword = player.heldItem?.item is ItemSword
+        if (!holdingSword) {
+            stopBlocking(true)
+            return
+        }
+
+        when (autoBlock) {
+            "Vanilla" -> {
+                // Vanilla: 持续格挡；如有目标则开始格挡
+                if (!blockStatus) {
+                    sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                    blockStatus = true
+                }
+                renderBlocking = true
+                // Vanilla 仍然允许攻击（普通 CPS 流程）
+                performLeaderLiteAttack()
+            }
+
+            "Hypixel" -> {
+                when (leaderBlockTick) {
+                    0 -> {
+                        if (!blockStatus) {
+                            sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                            blockStatus = true
+                        }
+                        renderBlocking = true
+                        leaderBlockTick = 1
+                    }
+                    1 -> {
+                        // 跳过攻击一帧
+                        leaderBlockTick = 2
+                    }
+                    2 -> {
+                        if (blockStatus) {
+                            if (!noStop) {
+                                val randomSlot = randomSlotDifferent(player.inventory.currentItem)
+                                sendPacket(C09PacketHeldItemChange(randomSlot))
+                                sendPacket(C09PacketHeldItemChange(player.inventory.currentItem))
+                            }
+                            sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
+                            blockStatus = false
+                        }
+                        // MoreAttack: 允许在某些 tick 攻击
+                        if (moreAttack) {
+                            if (leaderTestAttackTick >= moreAttackDelay) {
+                                leaderTestAttackTick = 0
+                                performLeaderLiteAttack()
+                            } else {
+                                leaderTestAttackTick++
+                            }
+                        }
+                        leaderBlockTick = 0
+                    }
+                    else -> leaderBlockTick = 0
+                }
+                renderBlocking = true
+            }
+
+            "Legit" -> {
+                when (leaderBlockTick) {
+                    0 -> {
+                        if (!blockStatus) {
+                            sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                            blockStatus = true
+                        }
+                        leaderBlockTick = 1
+                    }
+                    1 -> {
+                        if (blockStatus) {
+                            sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
+                            blockStatus = false
+                        }
+                        leaderBlockTick = 0
+                    }
+                    else -> leaderBlockTick = 0
+                }
+                renderBlocking = blockStatus
+            }
+
+            "HypixelNoSlow" -> {
+                when (leaderBlockTick) {
+                    0 -> {
+                        BlinkUtils.unblink()
+                        blinked = false
+                        if (!blockStatus) {
+                            sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                            blockStatus = true
+                        }
+                        leaderBlockTick = 1
+                    }
+                    1 -> {
+                        // 进入 blink：设置 blinked = true，onPacket 会拦截后续数据包
+                        blinked = true
+                        leaderBlockTick = 2
+                    }
+                    2 -> {
+                        if (blockStatus) {
+                            sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
+                            blockStatus = false
+                        }
+                        if (moreAttack) {
+                            if (leaderTestAttackTick >= moreAttackDelay) {
+                                leaderTestAttackTick = 0
+                                performLeaderLiteAttack()
+                            } else {
+                                leaderTestAttackTick++
+                            }
+                        }
+                        leaderBlockTick = 0
+                    }
+                    else -> leaderBlockTick = 0
+                }
+                renderBlocking = true
+            }
+
+            "HypixelCustom" -> {
+                // 自定义 tick 序列: 通过比较 leaderBlockTick + 1 与各 tick 阈值决定动作
+                if (leaderBlockTick + 1 == startBlinkTickCustom) {
+                    // 开始 blink：设置 blinked = true，onPacket 会拦截后续数据包
+                    blinked = true
+                }
+                val allowAttack = leaderBlockTick + 1 == attackTickCustom
+                if (leaderBlockTick + 1 == startBlockTickCustom) {
+                    if (!blockStatus) {
+                        sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                        blockStatus = true
+                        if (postStartBlock) leaderPostBlock = true
+                    }
+                }
+                if (leaderBlockTick + 1 == stopBlinkTickCustom) {
+                    BlinkUtils.unblink()
+                    blinked = false
+                }
+                if (leaderBlockTick + 1 == swapTickCustom) {
+                    val randomSlot = randomSlotDifferent(player.inventory.currentItem)
+                    sendPacket(C09PacketHeldItemChange(randomSlot))
+                    leaderSwapped = true
+                }
+                if (leaderBlockTick + 1 == switchBackTickCustom) {
+                    if (leaderSwapped) {
+                        sendPacket(C09PacketHeldItemChange(player.inventory.currentItem))
+                        leaderSwapped = false
+                    }
+                }
+                if (leaderBlockTick + 1 == stopBlockTickCustom) {
+                    if (blockStatus) {
+                        sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
+                        blockStatus = false
+                    }
+                }
+                if (allowAttack) performLeaderLiteAttack()
+                leaderBlockTick++
+                if (leaderBlockTick >= maxTickCustom - 1) leaderBlockTick = 0
+                renderBlocking = true
+            }
+
+            "HypixelTestA" -> {
+                when (leaderBlockTick) {
+                    0 -> {
+                        if (!blockStatus) {
+                            sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                            blockStatus = true
+                        }
+                        leaderBlockTick = 1
+                    }
+                    1 -> {
+                        if (blockStatus) {
+                            val handle = player.inventory.currentItem
+                            sendPacket(C09PacketHeldItemChange(handle % 8 + 1))
+                            sendPacket(C09PacketHeldItemChange(handle % 7 + 2))
+                            sendPacket(C09PacketHeldItemChange(handle))
+                        }
+                        leaderBlockTick = 2
+                    }
+                    2 -> {
+                        val handle = player.inventory.currentItem
+                        sendPacket(C09PacketHeldItemChange(handle % 8 + 1))
+                        sendPacket(C09PacketHeldItemChange(handle % 7 + 2))
+                        sendPacket(C09PacketHeldItemChange(handle))
+                        leaderBlockTick = 0
+                    }
+                    else -> leaderBlockTick = 0
+                }
+                renderBlocking = true
+            }
+
+            "HypixelLag" -> {
+                when (leaderBlockTick) {
+                    0 -> {
+                        if (!blockStatus) {
+                            sendPacket(C08PacketPlayerBlockPlacement(player.heldItem))
+                            blockStatus = true
+                        }
+                        leaderBlockTick = 1
+                    }
+                    1 -> {
+                        if (blockStatus) {
+                            sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
+                            blockStatus = false
+                        }
+                        leaderBlockTick = 2
+                    }
+                    2 -> {
+                        BlinkUtils.unblink()
+                        blinked = false
+                        leaderBlockTick = 0
+                    }
+                    else -> leaderBlockTick = 0
+                }
+                renderBlocking = if (blockStatus) true else alwaysRenderBlocking
+            }
+        }
+    }
+
+    /**
+     * 执行一次攻击（供 Leader-Lite AutoBlock 模式调用）。
+     * 与原版 Leader-Lite performAttack 对应：swingItem + C02PacketUseEntity(ATTACK)。
+     */
+    private fun performLeaderLiteAttack() {
+        val player = mc.thePlayer ?: return
+        val currentTarget = target ?: return
+
+        if (player.heldItem?.item !is ItemSword) return
+        if (currentTarget.hurtTime > hurtTime) return
+
+        // swing
+        if (swing) player.swingItem() else sendPacket(C0APacketAnimation())
+
+        // attack packet
+        sendPacket(C02PacketUseEntity(currentTarget, ATTACK))
+        CPSCounter.registerClick(CPSCounter.MouseButton.LEFT)
+        resetLastAttackedTicks()
+    }
+
+    /**
+     * 生成与 [current] 不同的随机槽位 (0..8)。
+     */
+    private fun randomSlotDifferent(current: Int): Int {
+        var slot: Int
+        do {
+            slot = nextInt(0, 9)
+        } while (slot == current)
+        return slot
+    }
+
+    // ===================== Leader-Lite AutoBlock 模式实现结束 =====================
 
     /**
      * Render event
@@ -1323,7 +1656,9 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
         val player = mc.thePlayer ?: return@handler
         val packet = event.packet
 
-        if (autoBlock == "Off" || !blinkAutoBlock || !blinked) return@handler
+        // Leader-Lite 模式自带 blink 逻辑，不需要 blinkAutoBlock 选项
+        val isLeaderLiteBlinkMode = autoBlock == "HypixelNoSlow" || autoBlock == "HypixelCustom"
+        if (autoBlock == "Off" || (!blinkAutoBlock && !isLeaderLiteBlinkMode) || !blinked) return@handler
 
         if (player.isDead || player.ticksExisted < 20) {
             BlinkUtils.unblink()

@@ -37,7 +37,10 @@ class ScoreboardElement(
     private val rectAlpha by int("Rect-Alpha", 255, 0..255) { rect }
 
     private val blur by boolean("Blur", false)
-    private val blurStrength by float("Blur-Strength", 10F, 1F..50F) { blur }
+    private val blurMode by choices("Blur-Mode", arrayOf("Default", "Kawase"), "Default") { blur }
+    private val blurStrength by float("Blur-Strength", 10F, 1F..50F) { blur && blurMode == "Default" }
+    private val kawaseIterations by int("Kawase-Iterations", 4, 1..10) { blur && blurMode == "Kawase" }
+    private val kawaseOffset by int("Kawase-Offset", 3, 1..10) { blur && blurMode == "Kawase" }
 
     private val enableGlass by boolean("EnableGlass", false)
     private val enableNeon by boolean("EnableNeon", false)
@@ -147,23 +150,47 @@ class ScoreboardElement(
                 GL11.glScalef(1F, 1F, 1F)
                 GL11.glPushMatrix()
 
-                if (rounded) {
-                    BlurUtils.blurAreaRounded(
-                        renderX.toFloat() + bgMinX * scale,
-                        renderY.toFloat() + bgMinY * scale,
-                        renderX.toFloat() + bgMaxX * scale,
-                        renderY.toFloat() + bgMaxY * scale,
-                        roundedRadius,
-                        blurStrength
+                if (blurMode == "Kawase") {
+                    // 使用区域blur，只模糊计分板区域
+                    val stencilTexture = mc.framebuffer.framebufferTexture
+                    
+                    // 计算scaled coordinates
+                    val blurX = renderX.toFloat() + bgMinX * scale
+                    val blurY = renderY.toFloat() + bgMinY * scale
+                    val blurWidth = (bgMaxX - bgMinX) * scale
+                    val blurHeight = (bgMaxY - bgMinY) * scale
+                    
+                    // 转换为像素坐标
+                    val sr = net.minecraft.client.gui.ScaledResolution(mc)
+                    val scaleFactor = mc.displayHeight.toFloat() / sr.scaledHeight.toFloat()
+                    val pixelX = (blurX * scaleFactor).toInt()
+                    val pixelY = (blurY * scaleFactor).toInt()
+                    val pixelWidth = (blurWidth * scaleFactor).toInt()
+                    val pixelHeight = (blurHeight * scaleFactor).toInt()
+                    
+                    net.ccbluex.liquidbounce.utils.render.shader.KawaseBlur.renderBlur(
+                        stencilTexture, kawaseIterations, kawaseOffset,
+                        pixelX, pixelY, pixelWidth, pixelHeight
                     )
                 } else {
-                    BlurUtils.blurArea(
-                        renderX.toFloat() + bgMinX * scale,
-                        renderY.toFloat() + bgMinY * scale,
-                        renderX.toFloat() + bgMaxX * scale,
-                        renderY.toFloat() + bgMaxY * scale,
-                        blurStrength
-                    )
+                    if (rounded) {
+                        BlurUtils.blurAreaRounded(
+                            renderX.toFloat() + bgMinX * scale,
+                            renderY.toFloat() + bgMinY * scale,
+                            renderX.toFloat() + bgMaxX * scale,
+                            renderY.toFloat() + bgMaxY * scale,
+                            roundedRadius,
+                            blurStrength
+                        )
+                    } else {
+                        BlurUtils.blurArea(
+                            renderX.toFloat() + bgMinX * scale,
+                            renderY.toFloat() + bgMinY * scale,
+                            renderX.toFloat() + bgMaxX * scale,
+                            renderY.toFloat() + bgMaxY * scale,
+                            blurStrength
+                        )
+                    }
                 }
 
                 GL11.glPopMatrix()

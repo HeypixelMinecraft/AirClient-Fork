@@ -9,6 +9,7 @@ package net.ccbluex.liquidbounce.features.module.modules.render
 import net.ccbluex.liquidbounce.event.EntityMovementEvent
 import net.ccbluex.liquidbounce.event.Render3DEvent
 import net.ccbluex.liquidbounce.event.UpdateEvent
+import net.ccbluex.liquidbounce.event.WorldEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
@@ -29,6 +30,7 @@ import net.minecraft.util.Vec3
 import org.lwjgl.opengl.GL11
 import java.awt.Color
 import java.util.*
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.*
 
 object DashTrail : Module("DashTrail", Category.RENDER) {
@@ -64,7 +66,11 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
     private const val POSITION_OFFSET_RANGE = 0.175f
     private const val Y_OFFSET_MULTIPLIER = 0.7f
 
-    private val dashCubics: MutableList<DashCubic> = ArrayList()
+    // 容量上限，防止无界增长导致内存泄漏
+    private const val MAX_CUBICS = 200
+    private const val MAX_SPARKS_PER_CUBIC = 30
+
+    private val dashCubics: MutableList<DashCubic> = CopyOnWriteArrayList()
     private val tessellator: Tessellator = Tessellator.getInstance()
     private val worldRenderer: WorldRenderer = tessellator.worldRenderer
     private val randomGenerator = Random()
@@ -157,18 +163,22 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
             } else {
                 (entitySpeed / SPEED_DIVISOR).toInt().coerceIn(MIN_DASH_COUNT, MAX_DASH_COUNT)
             }
-            for (i in 0 until dashCount) {
-                dashCubics.add(
-                    DashCubic(
-                        DashBase(
-                            player,
-                            0.04f,
-                            i.toFloat() / dashCount,
-                            animationDuration
-                        ),
-                        showDashSegments || showDashDots
+            // 容量保护：超过上限时不再添加
+            if (dashCubics.size < MAX_CUBICS) {
+                for (i in 0 until dashCount) {
+                    if (dashCubics.size >= MAX_CUBICS) break
+                    dashCubics.add(
+                        DashCubic(
+                            DashBase(
+                                player,
+                                0.04f,
+                                i.toFloat() / dashCount,
+                                animationDuration
+                            ),
+                            showDashSegments || showDashDots
+                        )
                     )
-                )
+                }
             }
         }
 
@@ -199,7 +209,10 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
 
         val dashCount = (entitySpeed / SPEED_DIVISOR).toInt().coerceIn(MIN_DASH_COUNT, MAX_DASH_COUNT)
 
+        // 容量保护：超过上限时不再添加
+        if (dashCubics.size >= MAX_CUBICS) return@handler
         for (i in 0 until dashCount) {
+            if (dashCubics.size >= MAX_CUBICS) break
             dashCubics.add(
                 DashCubic(
                     DashBase(
@@ -297,6 +310,14 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
         }
     }
 
+    val onWorld = handler<WorldEvent> {
+        dashCubics.clear()
+    }
+
+    override fun onDisable() {
+        dashCubics.clear()
+    }
+
     private fun drawBoundTexture(
         x: Float,
         y: Float,
@@ -345,7 +366,7 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
         var animationProgress: Float = 1.0f
         private var startTime: Long = System.currentTimeMillis()
         val rotationAngles = floatArrayOf(0.0f, 0.0f)
-        val dashSparks: MutableList<DashSpark> = ArrayList()
+        val dashSparks: MutableList<DashSpark> = CopyOnWriteArrayList()
 
         init {
             if (sqrt(base.motionX * base.motionX + base.motionZ * base.motionZ) < 5.0E-4) {
@@ -370,8 +391,11 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
             base.prevPosZ = base.posZ
 
             if (addExtras) {
-                if (randomGenerator.nextInt(12) > 5) {
-                    repeat(if (showDashSegments) 1 else 3) { addDashSpark(this) }
+                // 容量保护：限制每个 cubic 的 sparks 数量
+                if (dashSparks.size < MAX_SPARKS_PER_CUBIC && randomGenerator.nextInt(12) > 5) {
+                    repeat(if (showDashSegments) 1 else 3) {
+                        if (dashSparks.size < MAX_SPARKS_PER_CUBIC) addDashSpark(this)
+                    }
                 }
                 dashSparks.forEach { it.processMotion() }
             }

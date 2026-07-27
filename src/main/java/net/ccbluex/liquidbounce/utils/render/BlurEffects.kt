@@ -81,6 +81,9 @@ object BlurEffects {
         buffer.bindFramebufferTexture()
         setupTextureParams()
 
+        // Save GL state before modifying blend/alpha
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT or GL11.GL_CURRENT_BIT)
+
         // Enable blending when writing back to main buffer to preserve transparency
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -90,7 +93,9 @@ object BlurEffects {
         drawQuads()
 
         GL20.glUseProgram(0)
-        glEnable(GL_ALPHA_TEST)
+
+        // Restore GL state
+        GL11.glPopAttrib()
     }
     
     private fun renderDualBlur(radius: Float) {
@@ -122,14 +127,19 @@ object BlurEffects {
         temp.bindFramebufferTexture()
         setupTextureParams()
 
+        // Save GL state before modifying blend/alpha
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT or GL11.GL_CURRENT_BIT)
+
         // Enable blending when writing back to main buffer to preserve transparency
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDisable(GL_ALPHA_TEST)
         drawQuads()
-        glEnable(GL_ALPHA_TEST)
 
         GL20.glUseProgram(0)
+
+        // Restore GL state
+        GL11.glPopAttrib()
     }
     
     private fun ensureBuffers(w: Int, h: Int) {

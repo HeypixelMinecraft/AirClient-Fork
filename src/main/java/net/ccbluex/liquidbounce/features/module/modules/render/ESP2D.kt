@@ -13,6 +13,7 @@
 package net.ccbluex.liquidbounce.features.module.modules.render
 
 import net.ccbluex.liquidbounce.event.Render2DEvent
+import net.ccbluex.liquidbounce.event.WorldEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
@@ -120,6 +121,10 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
     val collectedEntities: MutableList<Entity?> = mutableListOf()
 
     override fun onDisable() {
+        collectedEntities.clear()
+    }
+
+    val onWorld = handler<WorldEvent> {
         collectedEntities.clear()
     }
 
@@ -519,7 +524,7 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
     }
 
     private fun project2D(scaleFactor: Int, x: Double, y: Double, z: Double): Vector3d? {
-        // 使用每帧开头缓存的 modelview/projection/viewport，避免每个顶点都调用 glGetFloat/glGetInteger
+        // 使用每帧开头缓存的 modelview/projection/viewport，避免 project2D 中每个顶点都 glGetFloat/glGetInteger
         return if (GLU.gluProject(
                 x.toFloat(), y.toFloat(), z.toFloat(),
                 modelview, projection, viewport, vector

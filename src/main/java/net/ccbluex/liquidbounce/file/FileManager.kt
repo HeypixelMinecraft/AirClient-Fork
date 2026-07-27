@@ -38,6 +38,7 @@ object FileManager : MinecraftInstance, Iterable<FileConfig> by FILE_CONFIGS {
     val xrayConfig = +XRayConfig(File(dir, "xray-blocks.json"))
     val hudConfig = +HudConfig(File(dir, "hud.json"))
     val shortcutsConfig = +ShortcutsConfig(File(dir, "shortcuts.json"))
+    val airiConfig = +AiriConfig(File(dir, "airi.json"))
 
     val backgroundImageFile = File(dir, "userbackground.png")
     val backgroundShaderFile = File(dir, "userbackground.frag")
