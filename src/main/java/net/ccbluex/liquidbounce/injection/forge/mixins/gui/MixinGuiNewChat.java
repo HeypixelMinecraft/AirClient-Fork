@@ -6,18 +6,15 @@ package net.ccbluex.liquidbounce.injection.forge.mixins.gui;
 
 import com.mojang.realmsclient.gui.ChatFormatting;
 import net.ccbluex.liquidbounce.features.module.modules.render.HUD;
+import net.ccbluex.liquidbounce.ui.font.GameFontRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ChatLine;
 import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiNewChat;
-import net.minecraft.client.gui.GuiUtilRenderComponents;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.IChatComponent;
 import net.minecraft.util.MathHelper;
-import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -25,19 +22,17 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.awt.*;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 
 @Mixin(GuiNewChat.class)
 public abstract class MixinGuiNewChat {
 
     private float displayPercent = 0F;
-    private float animationPercent = 0F;
-    private int lineBeingDrawn = 0;
+    private float animationPercent = 1F;
     private int newLines = 0;
 
     @Shadow
@@ -84,11 +79,13 @@ public abstract class MixinGuiNewChat {
     private int line = 0;
     private final HashMap<String, String> stringCache = new HashMap<>();
 
+    // Fix: Reset animation on new message
     @Inject(method = "printChatMessageWithOptionalDeletion", at = @At("HEAD"))
     private void resetPercentage(CallbackInfo ci) {
         displayPercent = 0F;
     }
 
+    // Fix: Chat combine - keep as @Overwrite since it replaces the entire message handling logic
     @Overwrite
     public void printChatMessage(IChatComponent chatComponent) {
         if (!HUD.INSTANCE.getState() || !HUD.INSTANCE.getChatCombine()) {
@@ -113,171 +110,77 @@ public abstract class MixinGuiNewChat {
         printChatMessageWithOptionalDeletion(chatComponent, this.line);
     }
 
-    @Overwrite
-    public void drawChat(int updateCounter) {
-        if (this.mc.gameSettings.chatVisibility != EntityPlayer.EnumChatVisibility.HIDDEN) {
-            int i = this.getLineCount();
-            boolean flag = false;
-            int j = 0;
-            int k = this.drawnChatLines.size();
-            float f = this.mc.gameSettings.chatOpacity * 0.9F + 0.1F;
-            if (k > 0) {
-                if (this.getChatOpen()) {
-                    flag = true;
-                }
-
-                if (this.isScrolled || !HUD.INSTANCE.getState() || !HUD.INSTANCE.getChatAnimation()) {
-                    displayPercent = 1F;
-                } else if (displayPercent < 1F) {
-                    displayPercent += HUD.INSTANCE.getChatAnimationSpeed() * 0.1F * Minecraft.getMinecraft().timer.renderPartialTicks;
-                    displayPercent = MathHelper.clamp_float(displayPercent, 0F, 1F);
-                }
-
-                float t = displayPercent;
-                animationPercent = MathHelper.clamp_float(1F - (--t) * t * t * t, 0F, 1F);
-
-                float f1 = this.getChatScale();
-                int l = MathHelper.ceiling_float_int((float) this.getChatWidth() / f1);
-                ScaledResolution sr = new ScaledResolution(mc);
-                int chatY = sr.getScaledHeight() - 40;
-
-                // ChatBlur: 在绘制聊天文字之前应用模糊（基于 scissor，无 stencil）
-                // 必须在绘制聊天文字之前应用，否则模糊会覆盖文字
-                if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatBlur()) {
-                    int chatHeight = (int) (i * 9 * f1);
-                    int chatRight = (int) (2 + (l + 4) * f1);
-                    HUD.INSTANCE.drawChatBlur(2, chatY - chatHeight, chatRight, chatY);
-                }
-
-                GlStateManager.pushMatrix();
-                if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatAnimation())
-                    GlStateManager.translate(0F, (1F - animationPercent) * 9F * this.getChatScale(), 0F);
-                GlStateManager.translate(2.0F, (float) chatY, 0.0F);
-                GlStateManager.scale(f1, f1, 1.0F);
-
-                int i1;
-                int j1;
-                int l1;
-                for (i1 = 0; i1 + this.scrollPos < this.drawnChatLines.size() && i1 < i; ++i1) {
-                    ChatLine chatline = this.drawnChatLines.get(i1 + this.scrollPos);
-                    lineBeingDrawn = i1 + this.scrollPos;
-                    if (chatline != null) {
-                        j1 = updateCounter - chatline.getUpdatedCounter();
-                        if (j1 < 200 || flag) {
-                            double d0 = (double) j1 / 200.0D;
-                            d0 = 1.0D - d0;
-                            d0 *= 10.0D;
-                            d0 = MathHelper.clamp_double(d0, 0.0D, 1.0D);
-                            d0 *= d0;
-                            l1 = (int) (255.0D * d0);
-                            if (flag) {
-                                l1 = 255;
-                            }
-
-                            l1 = (int) ((float) l1 * f);
-                            ++j;
-
-                            if (l1 > 3) {
-                                int i2 = 0;
-                                int j2 = -i1 * 9;
-
-                                // ChatBlur 开启时不绘制逐行背景（由模糊替代）
-                                if (!(HUD.INSTANCE.getState() && HUD.INSTANCE.getChatBlur()) && HUD.INSTANCE.getState() && HUD.INSTANCE.getChatRect()) {
-                                    if (HUD.INSTANCE.getChatAnimation() && lineBeingDrawn <= newLines && !flag)
-                                        drawRect(i2, j2 - 9, i2 + l + 4, j2, new Color(0F, 0F, 0F, animationPercent * ((float) d0 / 2F)).getRGB());
-                                    else
-                                        drawRect(i2, j2 - 9, i2 + l + 4, j2, (l1 / 2) << 24);
-                                }
-
-                                GlStateManager.resetColor();
-                                GlStateManager.color(1F, 1F, 1F, 1F);
-
-                                String s = fixString(chatline.getChatComponent().getFormattedText());
-                                GlStateManager.enableBlend();
-                                GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-                                FontRenderer fontRenderer = HUD.INSTANCE.getChatFont();
-                                if (HUD.INSTANCE.getChatAnimation() && lineBeingDrawn <= newLines)
-                                    fontRenderer.drawString(s, (float) i2, (float) (j2 - 8), new Color(1F, 1F, 1F, animationPercent * (float) d0).getRGB(), true);
-                                else
-                                    fontRenderer.drawString(s, (float) i2, (float) (j2 - 8), 16777215 + (l1 << 24), true);
-                                GlStateManager.disableAlpha();
-                                GlStateManager.disableBlend();
-                            }
-                        }
-                    }
-                }
-
-                if (flag) {
-                    i1 = this.mc.fontRendererObj.FONT_HEIGHT;
-                    GlStateManager.translate(-3.0F, 0.0F, 0.0F);
-                    int l2 = k * i1 + k;
-                    j1 = j * i1 + j;
-                    int j3 = this.scrollPos * j1 / k;
-                    int k1 = j1 * j1 / l2;
-                    if (l2 != j1) {
-                        l1 = j3 > 0 ? 170 : 96;
-                        int l3 = this.isScrolled ? 13382451 : 3355562;
-                        drawRect(0, -j3, 2, -j3 - k1, l3 + (l1 << 24));
-                        drawRect(2, -j3, 1, -j3 - k1, 13421772 + (l1 << 24));
-                    }
-                }
-
-                GlStateManager.popMatrix();
-            }
+    // Fix: Redirect font rendering in drawChat to use custom font (like NekoBounce)
+    @Redirect(method = "drawChat", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/FontRenderer;drawStringWithShadow(Ljava/lang/String;FFI)I"))
+    private int injectFontChatDraw(FontRenderer instance, String text, float x, float y, int color) {
+        String fixedText = fixString(text);
+        if (HUD.INSTANCE.shouldModifyChatFont()) {
+            return HUD.INSTANCE.getChatFont().drawStringWithShadow(fixedText, x, y, color);
         }
+        return instance.drawStringWithShadow(fixedText, x, y, color);
     }
 
-    @Overwrite
-    public IChatComponent getChatComponent(int p_146236_1_, int p_146236_2_) {
-        if (!this.getChatOpen()) {
-            return null;
-        } else {
-            ScaledResolution sc = new ScaledResolution(this.mc);
-            int scaleFactor = sc.getScaleFactor();
-            float chatScale = this.getChatScale();
-            int mX = p_146236_1_ / scaleFactor - 3;
-            int mY = p_146236_2_ / scaleFactor - 27;
-            mX = MathHelper.floor_float((float) mX / chatScale);
-            mY = MathHelper.floor_float((float) mY / chatScale);
-            if (mX >= 0 && mY >= 0) {
-                int lineCount = Math.min(this.getLineCount(), this.drawnChatLines.size());
-                FontRenderer fontRenderer = HUD.INSTANCE.getChatFont();
-                if (mX <= MathHelper.floor_float((float) this.getChatWidth() / this.getChatScale()) && mY < fontRenderer.FONT_HEIGHT * lineCount + lineCount) {
-                    int line = mY / fontRenderer.FONT_HEIGHT + this.scrollPos;
-                    if (line >= 0 && line < this.drawnChatLines.size()) {
-                        ChatLine chatLine = this.drawnChatLines.get(line);
-                        int maxWidth = 0;
-                        Iterator iter = chatLine.getChatComponent().iterator();
-
-                        while (iter.hasNext()) {
-                            IChatComponent iterator = (IChatComponent) iter.next();
-                            if (iterator instanceof ChatComponentText) {
-                                maxWidth += fontRenderer.getStringWidth(GuiUtilRenderComponents.func_178909_a(((ChatComponentText) iterator).getChatComponentText_TextValue(), false));
-                                if (maxWidth > mX) {
-                                    return iterator;
-                                }
-                            }
-                        }
-
-                        return null;
-                    } else {
-                        return null;
-                    }
-                } else {
-                    return null;
-                }
-            } else {
-                return null;
+    // Fix: Redirect FONT_HEIGHT field access in drawChat and getChatComponent to use custom font height
+    @Redirect(method = {"getChatComponent", "drawChat"}, at = @At(value = "FIELD", target = "Lnet/minecraft/client/gui/FontRenderer;FONT_HEIGHT:I"))
+    private int injectFontChatHeight(FontRenderer instance) {
+        if (HUD.INSTANCE.shouldModifyChatFont()) {
+            FontRenderer chatFont = HUD.INSTANCE.getChatFont();
+            if (chatFont instanceof GameFontRenderer) {
+                return ((GameFontRenderer) chatFont).getHeight();
             }
         }
+        return instance.FONT_HEIGHT;
     }
 
+    // Fix: Redirect getStringWidth in getChatComponent to use custom font width
+    @Redirect(method = "getChatComponent", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/FontRenderer;getStringWidth(Ljava/lang/String;)I"))
+    private int injectFontChatWidth(FontRenderer instance, String text) {
+        if (HUD.INSTANCE.shouldModifyChatFont()) {
+            return HUD.INSTANCE.getChatFont().getStringWidth(text);
+        }
+        return instance.getStringWidth(text);
+    }
+
+    // Fix: Redirect the first translate call in drawChat to add animation offset
+    @Redirect(method = "drawChat", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GlStateManager;translate(FFF)V", ordinal = 0))
+    private void injectChatAnimationTranslate(float x, float y, float z) {
+        // Update animation state
+        if (this.isScrolled || !HUD.INSTANCE.getState() || !HUD.INSTANCE.getChatAnimation()) {
+            displayPercent = 1F;
+        } else if (displayPercent < 1F) {
+            displayPercent += HUD.INSTANCE.getChatAnimationSpeed() * 0.1F * Minecraft.getMinecraft().timer.renderPartialTicks;
+            displayPercent = MathHelper.clamp_float(displayPercent, 0F, 1F);
+        }
+
+        float t = displayPercent;
+        animationPercent = MathHelper.clamp_float(1F - (--t) * t * t * t, 0F, 1F);
+
+        float offsetY = 0F;
+        if (HUD.INSTANCE.getState() && HUD.INSTANCE.getChatAnimation()) {
+            offsetY = (1F - animationPercent) * 9F * this.getChatScale();
+        }
+
+        GlStateManager.translate(x, y + offsetY, z);
+    }
+
+    // Fix: Redirect chat background drawRect to support chatRect toggle
+    @Redirect(method = "drawChat", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;drawRect(IIIII)V", ordinal = 0))
+    private void injectChatRect(int left, int top, int right, int bottom, int color) {
+        // When HUD is on and chatRect is off, hide the background
+        if (HUD.INSTANCE.getState() && !HUD.INSTANCE.getChatRect()) {
+            return;
+        }
+        Gui.drawRect(left, top, right, bottom, color);
+    }
+
+    // Fix: Track new lines for animation
     @ModifyVariable(method = "setChatLine", at = @At("STORE"), ordinal = 0)
     private List<IChatComponent> setNewLines(List<IChatComponent> original) {
         newLines = original.size() - 1;
         return original;
     }
 
+    // Fix: Convert fullwidth characters to halfwidth for CJK text rendering
     private String fixString(String str) {
         if (stringCache.containsKey(str)) return stringCache.get(str);
 
@@ -295,34 +198,5 @@ public abstract class MixinGuiNewChat {
         stringCache.put(str, result);
 
         return result;
-    }
-
-    private void drawRect(int left, int top, int right, int bottom, int color) {
-        if (left < right) {
-            int i = left;
-            left = right;
-            right = i;
-        }
-        if (top < bottom) {
-            int j = top;
-            top = bottom;
-            bottom = j;
-        }
-        float f = (float) (color >> 24 & 255) / 255.0F;
-        float f1 = (float) (color >> 16 & 255) / 255.0F;
-        float f2 = (float) (color >> 8 & 255) / 255.0F;
-        float f3 = (float) (color & 255) / 255.0F;
-        GlStateManager.disableTexture2D();
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-        GlStateManager.color(f1, f2, f3, f);
-        GL11.glBegin(GL11.GL_QUADS);
-        GL11.glVertex3f((float) left, (float) bottom, 0.0F);
-        GL11.glVertex3f((float) right, (float) bottom, 0.0F);
-        GL11.glVertex3f((float) right, (float) top, 0.0F);
-        GL11.glVertex3f((float) left, (float) top, 0.0F);
-        GL11.glEnd();
-        GlStateManager.disableBlend();
-        GlStateManager.enableTexture2D();
     }
 }

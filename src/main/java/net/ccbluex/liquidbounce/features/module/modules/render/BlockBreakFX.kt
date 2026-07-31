@@ -13,7 +13,6 @@ import net.minecraft.util.BlockPos
 import org.lwjgl.opengl.GL11.*
 import java.awt.Color
 import java.util.Random
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -48,7 +47,8 @@ object BlockBreakFX : Module("BlockBreakFX", Category.RENDER, gameDetecting = fa
         val blockColor: Color
     )
     
-    private val breakEffects = CopyOnWriteArrayList<BreakEffect>()
+    // onBlockBreak/onRender3D 均在主线程触发，无需 CopyOnWriteArrayList
+    private val breakEffects = ArrayList<BreakEffect>()
     private val random = Random()
 
     private fun getBlockColor(block: Block): Color {
@@ -109,12 +109,16 @@ object BlockBreakFX : Module("BlockBreakFX", Category.RENDER, gameDetecting = fa
     }
 
     val onRender3D = handler<Render3DEvent> {
+        if (breakEffects.isEmpty()) return@handler
         val currentTime = System.currentTimeMillis()
         val renderManager = mc.renderManager ?: return@handler
         val renderPosX = renderManager.viewerPosX
         val renderPosY = renderManager.viewerPosY
         val renderPosZ = renderManager.viewerPosZ
-        
+
+        // 先过滤过期效果（ArrayList.removeIf 是 O(n)）
+        breakEffects.removeIf { effect -> currentTime - effect.startTime > effectDuration }
+
         glPushMatrix()
         glDisable(GL_TEXTURE_2D)
         glDisable(GL_LIGHTING)
@@ -122,22 +126,16 @@ object BlockBreakFX : Module("BlockBreakFX", Category.RENDER, gameDetecting = fa
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDisable(GL_DEPTH_TEST)
         glPointSize(particleSize)
-        
-        breakEffects.removeIf { effect ->
-            val elapsed = currentTime - effect.startTime
-            if (elapsed > effectDuration) return@removeIf true
-            
-            when (effectMode) {
-                "Fire" -> renderFireEffect(effect, renderPosX, renderPosY, renderPosZ, currentTime)
-                "Pixels" -> renderPixelsEffect(effect, renderPosX, renderPosY, renderPosZ)
-                "Sparkle" -> renderSparkleEffect(effect, renderPosX, renderPosY, renderPosZ, currentTime)
-                "Smoke" -> renderSmokeEffect(effect, renderPosX, renderPosY, renderPosZ)
-                "Lightning" -> renderLightningEffect(effect, renderPosX, renderPosY, renderPosZ)
-            }
-            
-            false
+
+        // 再渲染剩余效果
+        when (effectMode) {
+            "Fire" -> breakEffects.forEach { renderFireEffect(it, renderPosX, renderPosY, renderPosZ, currentTime) }
+            "Pixels" -> breakEffects.forEach { renderPixelsEffect(it, renderPosX, renderPosY, renderPosZ) }
+            "Sparkle" -> breakEffects.forEach { renderSparkleEffect(it, renderPosX, renderPosY, renderPosZ, currentTime) }
+            "Smoke" -> breakEffects.forEach { renderSmokeEffect(it, renderPosX, renderPosY, renderPosZ) }
+            "Lightning" -> breakEffects.forEach { renderLightningEffect(it, renderPosX, renderPosY, renderPosZ) }
         }
-        
+
         glEnable(GL_DEPTH_TEST)
         glDisable(GL_BLEND)
         glEnable(GL_TEXTURE_2D)

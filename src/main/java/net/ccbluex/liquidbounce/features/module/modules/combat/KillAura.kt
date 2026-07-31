@@ -151,6 +151,9 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
         "UnblockMode", arrayOf("Stop", "Switch", "Empty"), "Stop"
     ) { autoBlock == "Packet" || autoBlock == "QuickMacro" || autoBlock == "HurtTime" }
     private val releaseAutoBlock by boolean("ReleaseAutoBlock", true) { autoBlock !in arrayOf("Off", "Fake", "BlockOnNoHit", "HurtTime", "Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag") }
+    val alwaysRenderBlockAnim by boolean("AlwaysRenderBlockAnim", true) {
+        autoBlock in arrayOf("Vanilla", "Hypixel", "Legit", "HypixelNoSlow", "HypixelCustom", "HypixelTestA", "HypixelLag")
+    }
     val forceBlockRender by boolean("ForceBlockRender", true) {
         autoBlock !in arrayOf(
             "Off", "Fake"
@@ -500,9 +503,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
 
         stopBlocking(true)
 
-        synchronized(swingFails) {
-            swingFails.clear()
-        }
+        swingFails.clear()
     }
 
     val onRotationUpdate = handler<RotationUpdateEvent> {
@@ -538,9 +539,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
 
         if (blinkAutoBlock && BlinkUtils.isBlinking) BlinkUtils.unblink()
 
-        synchronized(swingFails) {
-            swingFails.clear()
-        }
+        swingFails.clear()
     }
 
     /**
@@ -800,7 +799,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                             sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
                             blockStatus = false
                         }
-                        // MoreAttack: 允许在某些 tick 攻击
+                        // 解除格挡后攻击
                         if (moreAttack) {
                             if (leaderTestAttackTick >= moreAttackDelay) {
                                 leaderTestAttackTick = 0
@@ -808,6 +807,8 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                             } else {
                                 leaderTestAttackTick++
                             }
+                        } else {
+                            performLeaderLiteAttack()
                         }
                         leaderBlockTick = 0
                     }
@@ -830,6 +831,8 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                             sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
                             blockStatus = false
                         }
+                        // 解除格挡后攻击
+                        performLeaderLiteAttack()
                         leaderBlockTick = 0
                     }
                     else -> leaderBlockTick = 0
@@ -858,6 +861,7 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                             sendPacket(C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN))
                             blockStatus = false
                         }
+                        // 解除格挡后攻击
                         if (moreAttack) {
                             if (leaderTestAttackTick >= moreAttackDelay) {
                                 leaderTestAttackTick = 0
@@ -865,6 +869,8 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                             } else {
                                 leaderTestAttackTick++
                             }
+                        } else {
+                            performLeaderLiteAttack()
                         }
                         leaderBlockTick = 0
                     }
@@ -937,6 +943,8 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                         sendPacket(C09PacketHeldItemChange(handle % 8 + 1))
                         sendPacket(C09PacketHeldItemChange(handle % 7 + 2))
                         sendPacket(C09PacketHeldItemChange(handle))
+                        // slot 切换完成后攻击
+                        performLeaderLiteAttack()
                         leaderBlockTick = 0
                     }
                     else -> leaderBlockTick = 0
@@ -963,12 +971,19 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                     2 -> {
                         BlinkUtils.unblink()
                         blinked = false
+                        // blink 取消后攻击
+                        performLeaderLiteAttack()
                         leaderBlockTick = 0
                     }
                     else -> leaderBlockTick = 0
                 }
                 renderBlocking = if (blockStatus) true else alwaysRenderBlocking
             }
+        }
+
+        // 当 AlwaysRenderBlockAnim 启用时，只要有目标就持续渲染格挡动画
+        if (alwaysRenderBlockAnim && currentTarget != null) {
+            renderBlocking = true
         }
     }
 
@@ -1165,12 +1180,10 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
                             mc.clickMouse()
 
                             if (renderBoxOnSwingFail) {
-                                synchronized(swingFails) {
-                                    val centerDistance = (currentTarget.hitBox.center - player.eyes).lengthVector()
-                                    val spot = player.eyes + getVectorForRotation(rotation) * centerDistance
+                                val centerDistance = (currentTarget.hitBox.center - player.eyes).lengthVector()
+                                val spot = player.eyes + getVectorForRotation(rotation) * centerDistance
 
-                                    swingFails += SwingFailData(spot, System.currentTimeMillis())
-                                }
+                                swingFails += SwingFailData(spot, System.currentTimeMillis())
                             }
                         }
                     }
@@ -1737,22 +1750,20 @@ object KillAura : Module("KillAura", Category.COMBAT, Keyboard.KEY_R) {
 
         val box = AxisAlignedBB(0.0, 0.0, 0.0, 0.05, 0.05, 0.05)
 
-        synchronized(swingFails) {
-            val fadeSeconds = renderBoxFadeSeconds * 1000L
-            val colorSettings = renderBoxColor
+        val fadeSeconds = renderBoxFadeSeconds * 1000L
+        val colorSettings = renderBoxColor
 
-            val renderManager = mc.renderManager
+        val renderManager = mc.renderManager
 
-            swingFails.removeAll {
-                val timestamp = System.currentTimeMillis() - it.startTime
-                val transparency = (0f..255f).lerpWith(1 - (timestamp / fadeSeconds).coerceAtMost(1.0F))
+        swingFails.removeAll {
+            val timestamp = System.currentTimeMillis() - it.startTime
+            val transparency = (0f..255f).lerpWith(1 - (timestamp / fadeSeconds).coerceAtMost(1.0F))
 
-                val offsetBox = box.offset(it.vec3 - renderManager.renderPos)
+            val offsetBox = box.offset(it.vec3 - renderManager.renderPos)
 
-                RenderUtils.drawAxisAlignedBB(offsetBox, colorSettings.color(a = transparency.roundToInt()))
+            RenderUtils.drawAxisAlignedBB(offsetBox, colorSettings.color(a = transparency.roundToInt()))
 
-                timestamp > fadeSeconds
-            }
+            timestamp > fadeSeconds
         }
     }
 

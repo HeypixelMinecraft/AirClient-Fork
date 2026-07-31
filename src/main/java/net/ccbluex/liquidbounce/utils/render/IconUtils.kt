@@ -21,11 +21,15 @@ object IconUtils {
 
     @JvmStatic
     fun initLwjglIcon(): Boolean {
-        favicon?.let {icons ->
-            if (icons.all { it != null }) {
-                Display.setIcon(icons)
-                return true
+        try {
+            favicon?.let {icons ->
+                if (icons.all { it != null }) {
+                    Display.setIcon(icons)
+                    return true
+                }
             }
+        } catch (e: Exception) {
+            ClientUtils.LOGGER.warn("Failed to set window icon (may be unsupported on this platform): ${e.message}")
         }
         return false
     }

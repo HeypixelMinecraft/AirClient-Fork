@@ -14,6 +14,8 @@ import net.ccbluex.liquidbounce.utils.client.ClientUtils.LOGGER
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.ChatLine
 import net.minecraft.util.EnumChatFormatting
+import java.awt.Desktop
+import java.net.URI
 import java.io.File
 
 /**
@@ -165,6 +167,19 @@ object ScriptBridge {
                     "required" to emptyList<String>()
                 )
             )
+        ),
+        ToolDefinition(
+            function = ToolFunction(
+                name = "open_browser",
+                description = "Open the user's default browser and navigate to a URL. Use this to show websites, search results, documentation, or any web resource to the user.",
+                parameters = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "url" to mapOf("type" to "string", "description" to "The URL to open in the browser, e.g. https://www.google.com")
+                    ),
+                    "required" to listOf("url")
+                )
+            )
         )
     )
 
@@ -183,6 +198,7 @@ object ScriptBridge {
             "delete_script" -> deleteScript(args["name"] ?: "")
             "reload_scripts" -> reloadScripts()
             "get_chat_history" -> getChatHistory(args["count"]?.toIntOrNull() ?: 20)
+            "open_browser" -> openBrowser(args["url"] ?: "")
             else -> Result(false, "Unknown tool: $name")
         }
     }
@@ -372,6 +388,31 @@ object ScriptBridge {
         } catch (t: Throwable) {
             LOGGER.warn("[Airi] Failed to get chat history: ${t.message}")
             Result(false, "Failed to get chat history: ${t.message}")
+        }
+    }
+
+    /** 打开浏览器访问指定 URL */
+    private fun openBrowser(url: String): Result {
+        if (url.isBlank()) return Result(false, "URL is required")
+        val trimmedUrl = url.trim()
+        // 确保URL有协议前缀
+        val finalUrl = if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
+            "https://$trimmedUrl"
+        } else {
+            trimmedUrl
+        }
+        return try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(URI(finalUrl))
+                LOGGER.info("[Airi] Opened browser: $finalUrl")
+                Result(true, "Opened browser to: $finalUrl")
+            } else {
+                LOGGER.warn("[Airi] Desktop.browse not supported on this platform")
+                Result(false, "Opening browser is not supported on this platform")
+            }
+        } catch (t: Throwable) {
+            LOGGER.error("[Airi] Failed to open browser: ${t.message}")
+            Result(false, "Failed to open browser: ${t.message}")
         }
     }
 }

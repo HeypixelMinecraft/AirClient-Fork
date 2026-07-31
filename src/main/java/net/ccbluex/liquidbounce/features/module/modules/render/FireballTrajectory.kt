@@ -37,13 +37,18 @@ object FireballTrajectory : Module("FireballTrajectory", Category.RENDER, gameDe
 
     val onRender3D = handler<Render3DEvent> {
         trackedFireballs.clear()
-        
-        mc.theWorld?.loadedEntityList?.filterIsInstance<EntityFireball>()?.forEach { fireball ->
-            val predictedPos = predictLandingPosition(fireball)
-            val landingBlock = findGroundPosition(predictedPos)
-            trackedFireballs.add(FireballData(fireball, predictedPos, landingBlock))
+
+        // 直接遍历 loadedEntityList，避免每帧 filterIsInstance 创建中间列表
+        val world = mc.theWorld
+        if (world != null) {
+            for (entity in world.loadedEntityList) {
+                if (entity !is EntityFireball) continue
+                val predictedPos = predictLandingPosition(entity)
+                val landingBlock = findGroundPosition(predictedPos)
+                trackedFireballs.add(FireballData(entity, predictedPos, landingBlock))
+            }
         }
-        
+
         if (trackedFireballs.isEmpty()) return@handler
         
         val renderManager = mc.renderManager ?: return@handler

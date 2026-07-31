@@ -80,11 +80,23 @@ abstract class FramebufferShader(fragmentShader: String) : Shader(fragmentShader
 
     /**
      * @author TheSlowly, Navex
+     *
+     * 性能优化: 仅在尺寸变化时重建 Framebuffer, 复用现有 Framebuffer 避免每帧分配 GPU 内存。
+     * 原实现每帧 deleteFramebuffer + new Framebuffer, 是 Glow/Outline 渲染的头号性能杀手。
      */
     fun setupFrameBuffer(frameBuffer: Framebuffer?, renderScale: Float): Framebuffer {
+        val targetWidth = (mc.displayWidth * renderScale).roundToInt()
+        val targetHeight = (mc.displayHeight * renderScale).roundToInt()
+
+        // 尺寸未变化则直接复用, 避免每帧分配全屏纹理+深度缓冲
+        if (frameBuffer != null
+            && frameBuffer.framebufferWidth == targetWidth
+            && frameBuffer.framebufferHeight == targetHeight) {
+            return frameBuffer
+        }
+
         frameBuffer?.deleteFramebuffer()
-        
-        return Framebuffer((mc.displayWidth * renderScale).roundToInt(), (mc.displayHeight * renderScale).roundToInt(), true)
+        return Framebuffer(targetWidth, targetHeight, true)
     }
 
     /**

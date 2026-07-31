@@ -76,7 +76,7 @@ class CustomMainMenu : AbstractScreen() {
         drawDefaultBackground()
         
         RenderUtils.drawImage(
-            ResourceLocation("airclient/MCDOG.png"),
+            ResourceLocation("airclient/miku.png"),
             0, 0, width, height
         )
         
@@ -194,8 +194,8 @@ class CustomMainMenu : AbstractScreen() {
         
         RenderUtils.drawRoundedRectInt(switchBtnX, switchBtnY, switchBtnX + switchBtnWidth, switchBtnY + switchBtnHeight, switchBtnColor.rgb, 3f)
         Fonts.fontSemibold35.drawCenteredString(
-            "Switch Style", 
-            switchBtnX + switchBtnWidth / 2f, 
+            MainMenuStyles.displayName(ClientConfiguration.mainMenuStyle),
+            switchBtnX + switchBtnWidth / 2f,
             switchBtnY + (switchBtnHeight - Fonts.fontSemibold35.FONT_HEIGHT) / 2f,
             switchTextColor.rgb
         )
@@ -232,9 +232,9 @@ class CustomMainMenu : AbstractScreen() {
                                mouseY >= switchBtnY && mouseY <= switchBtnY + switchBtnHeight
         
         if (isHoveringSwitch && mouseButton == 0 && timer.hasTimePassed(200)) {
-            ClientConfiguration.mainMenuStyle = "Default"
+            ClientConfiguration.mainMenuStyle = MainMenuStyles.next(ClientConfiguration.mainMenuStyle)
             FileManager.saveConfig(valuesConfig)
-            mc.displayGuiScreen(GuiMainMenu())
+            mc.displayGuiScreen(MainMenuStyles.createScreen(ClientConfiguration.mainMenuStyle) as net.minecraft.client.gui.GuiScreen)
             timer.reset()
             return
         }

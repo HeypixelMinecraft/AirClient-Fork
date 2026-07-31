@@ -36,10 +36,7 @@ class Novoline2(inst: Target2) : TargetStyle("Novoline2", inst, true) {
             drawHead(skinLocation, 2, 2, 30, 30)
         }
         Fonts.minecraftFont.drawStringWithShadow(
-            java.math.BigDecimal((entity.health / entity.maxHealth * 100).toDouble()).setScale(
-                1,
-                java.math.BigDecimal.ROUND_HALF_UP
-            ).toString() + "%", width / 2F + 5.5F, 16F, Color.white.rgb
+            String.format("%.1f%%", entity.health / entity.maxHealth * 100F), width / 2F + 5.5F, 16F, Color.white.rgb
         )
     }
 

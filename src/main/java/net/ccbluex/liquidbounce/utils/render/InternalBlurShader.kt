@@ -17,9 +17,11 @@ object InternalBlurShader {
     private var uniformRadiusLocation = -1
 
     fun blurArea(x: Float, y: Float, width: Float, height: Float, radius: Float) {
+        ensureShaderInitialized()
+        if (shaderProgramID <= 0) return  // Shader not available on this platform, skip blur
+
         val sr = ScaledResolution(mc)
         val factor = sr.scaleFactor
-        ensureShaderInitialized()
         ensureFramebuffer(mc.displayWidth, mc.displayHeight)
 
         val sX = (x * factor).toInt()
@@ -88,25 +90,34 @@ object InternalBlurShader {
 
     private fun ensureShaderInitialized() {
         if (shaderProgramID != -1) return
-        val vertexShaderSrc = "#version 120\nvoid main() { gl_TexCoord[0] = gl_MultiTexCoord0; gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex; }"
-        val fragmentShaderSrc = "#version 120\nuniform sampler2D textureIn; uniform vec2 texelSize; uniform vec2 direction; uniform float radius;\nfloat gaussian(float x, float sigma) { return exp(-(x*x) / (2.0 * sigma * sigma)); }\nvoid main() { vec2 coord = gl_TexCoord[0].xy; vec4 sum = vec4(0.0); float totalWeight = 0.0; int range = int(min(radius, 50.0)); float sigma = radius / 2.0; for (int i = -range; i <= range; i++) { float weight = gaussian(float(i), sigma); vec2 offset = float(i) * texelSize * direction; sum += texture2D(textureIn, coord + offset) * weight; totalWeight += weight; } gl_FragColor = sum / totalWeight; }"
-        val vID = createShader(vertexShaderSrc, GL20.GL_VERTEX_SHADER)
-        val fID = createShader(fragmentShaderSrc, GL20.GL_FRAGMENT_SHADER)
-        shaderProgramID = GL20.glCreateProgram()
-        GL20.glAttachShader(shaderProgramID, vID)
-        GL20.glAttachShader(shaderProgramID, fID)
-        GL20.glLinkProgram(shaderProgramID)
-        // 链接完成后删除 shader 对象释放资源
-        GL20.glDetachShader(shaderProgramID, vID)
-        GL20.glDetachShader(shaderProgramID, fID)
-        GL20.glDeleteShader(vID)
-        GL20.glDeleteShader(fID)
-        GL20.glUseProgram(shaderProgramID)
-        uniformTextureLocation = GL20.glGetUniformLocation(shaderProgramID, "textureIn")
-        uniformTexelSizeLocation = GL20.glGetUniformLocation(shaderProgramID, "texelSize")
-        uniformDirectionLocation = GL20.glGetUniformLocation(shaderProgramID, "direction")
-        uniformRadiusLocation = GL20.glGetUniformLocation(shaderProgramID, "radius")
-        GL20.glUseProgram(0)
+        try {
+            val vertexShaderSrc = "#version 120\nvoid main() { gl_TexCoord[0] = gl_MultiTexCoord0; gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex; }"
+            val fragmentShaderSrc = "#version 120\nuniform sampler2D textureIn; uniform vec2 texelSize; uniform vec2 direction; uniform float radius;\nfloat gaussian(float x, float sigma) { return exp(-(x*x) / (2.0 * sigma * sigma)); }\nvoid main() { vec2 coord = gl_TexCoord[0].xy; vec4 sum = vec4(0.0); float totalWeight = 0.0; int range = int(min(radius, 50.0)); float sigma = radius / 2.0; for (int i = -range; i <= range; i++) { float weight = gaussian(float(i), sigma); vec2 offset = float(i) * texelSize * direction; sum += texture2D(textureIn, coord + offset) * weight; totalWeight += weight; } gl_FragColor = sum / totalWeight; }"
+            val vID = createShader(vertexShaderSrc, GL20.GL_VERTEX_SHADER)
+            val fID = createShader(fragmentShaderSrc, GL20.GL_FRAGMENT_SHADER)
+            if (vID == 0 || fID == 0) {
+                shaderProgramID = 0
+                return
+            }
+            shaderProgramID = GL20.glCreateProgram()
+            GL20.glAttachShader(shaderProgramID, vID)
+            GL20.glAttachShader(shaderProgramID, fID)
+            GL20.glLinkProgram(shaderProgramID)
+            // 链接完成后删除 shader 对象释放资源
+            GL20.glDetachShader(shaderProgramID, vID)
+            GL20.glDetachShader(shaderProgramID, fID)
+            GL20.glDeleteShader(vID)
+            GL20.glDeleteShader(fID)
+            GL20.glUseProgram(shaderProgramID)
+            uniformTextureLocation = GL20.glGetUniformLocation(shaderProgramID, "textureIn")
+            uniformTexelSizeLocation = GL20.glGetUniformLocation(shaderProgramID, "texelSize")
+            uniformDirectionLocation = GL20.glGetUniformLocation(shaderProgramID, "direction")
+            uniformRadiusLocation = GL20.glGetUniformLocation(shaderProgramID, "radius")
+            GL20.glUseProgram(0)
+        } catch (e: Exception) {
+            shaderProgramID = 0
+            System.err.println("[InternalBlurShader] Shader initialization failed (unsupported platform?): ${e.message}")
+        }
     }
 
     private fun ensureFramebuffer(w: Int, h: Int) {

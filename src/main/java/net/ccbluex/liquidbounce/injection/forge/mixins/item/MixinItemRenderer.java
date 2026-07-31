@@ -5,6 +5,7 @@
 package net.ccbluex.liquidbounce.injection.forge.mixins.item;
 
 import net.ccbluex.liquidbounce.features.module.modules.combat.AutoBlock;
+import net.ccbluex.liquidbounce.features.module.modules.combat.BlockHit;
 import net.ccbluex.liquidbounce.features.module.modules.combat.KillAura;
 import net.ccbluex.liquidbounce.features.module.modules.movement.NoSlow;
 import net.ccbluex.liquidbounce.features.module.modules.render.Animation;
@@ -121,9 +122,10 @@ public abstract class MixinItemRenderer {
 
         if (itemToRender != null) {
             boolean isForceBlocking = (itemToRender.getItem() instanceof ItemSword && !killAura.getAutoBlock().equals("Off") &&
-                    (killAura.getRenderBlocking() || killAura.getTarget() != null && (killAura.getBlinkAutoBlock() || killAura.getForceBlockRender()))
+                    (killAura.getRenderBlocking() || killAura.getTarget() != null && (killAura.getBlinkAutoBlock() || killAura.getForceBlockRender())))
                     || noSlow.isUNCPBlocking()
-                    || AutoBlock.INSTANCE.isBlocking());
+                    || AutoBlock.INSTANCE.isBlocking()
+                    || BlockHit.INSTANCE.isBlocking();
 
             if (itemToRender.getItem() instanceof ItemMap) {
                 renderItemMap(abstractclientplayer, f2, f, f1);

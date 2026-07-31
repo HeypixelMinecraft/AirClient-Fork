@@ -105,6 +105,7 @@ object NameTags : Module("NameTags", Category.RENDER) {
 
     private val inventoryBackground = ResourceLocation("textures/gui/container/inventory.png")
     private val decimalFormat = DecimalFormat("##0.00", DecimalFormatSymbols(Locale.ENGLISH))
+    private val decimalFormat1 = DecimalFormat("0.0", DecimalFormatSymbols(Locale.ENGLISH))
 
     private val entities by EntityLookup<EntityLivingBase>()
         .filter { bot || !isBot(it) }
@@ -114,11 +115,12 @@ object NameTags : Module("NameTags", Category.RENDER) {
     val onRender3D = handler<Render3DEvent> {
         if (mc.theWorld == null || mc.thePlayer == null) return@handler
 
-        glPushAttrib(GL_ENABLE_BIT)
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
         glPushMatrix()
 
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)
+        glDepthMask(false)
 
         glEnable(GL_LINE_SMOOTH)
 
@@ -160,13 +162,9 @@ object NameTags : Module("NameTags", Category.RENDER) {
             }
         }
 
-        glDisable(GL_BLEND)
-        glDisable(GL_LINE_SMOOTH)
-
+        glDepthMask(true)
         glPopMatrix()
         glPopAttrib()
-
-        glColor4f(1F, 1F, 1F, 1F)
     }
 
     private fun renderLBNameTag(entity: EntityLivingBase, isRenderingSelf: Boolean, name: String) {
@@ -354,7 +352,7 @@ object NameTags : Module("NameTags", Category.RENDER) {
 
         val font = fontValue
         val distanceText = "${distance.roundToInt()}m"
-        var healthText = "%.1f".format(health)
+        var healthText = decimalFormat1.format(health)
         if (openLoveEmoji) healthText = "❤${healthText}"
         val nameWidth = font.getStringWidth(name)
         val healthWidth = font.getStringWidth(healthText)

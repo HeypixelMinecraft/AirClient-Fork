@@ -9,8 +9,7 @@ import net.ccbluex.liquidbounce.features.module.modules.movement.speedmodes.Spee
 import net.ccbluex.liquidbounce.utils.extensions.isMoving
 import net.ccbluex.liquidbounce.utils.extensions.toRadians
 import net.minecraft.potion.Potion
-import java.math.BigDecimal
-import java.math.RoundingMode
+
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -125,8 +124,6 @@ object NCPBHop : SpeedMode("NCPBHop") {
         }
 
     private fun round(value: Double): Double {
-        var bigDecimal = BigDecimal(value)
-        bigDecimal = bigDecimal.setScale(3, RoundingMode.HALF_UP)
-        return bigDecimal.toDouble()
+        return Math.round(value * 1000.0) / 1000.0
     }
 }

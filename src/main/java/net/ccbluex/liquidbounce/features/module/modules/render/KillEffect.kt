@@ -26,6 +26,7 @@ object KillEffect : Module("KillEffect", Category.RENDER) {
     private val anims = mutableListOf<KillAnim>()
     private var killCombo = 0
     private var lastKillTime = 0L
+    private var lastEffectTime = 0L
     private val MAX_ANIMS = 16
 
     // 帧间血量追踪
@@ -108,6 +109,10 @@ object KillEffect : Module("KillEffect", Category.RENDER) {
 
     private fun onKill(target: EntityLivingBase) {
         val now = System.currentTimeMillis()
+        // 1s 冷却（不可开关），1s 内不会重复触发
+        if (now - lastEffectTime < 1000) return
+        lastEffectTime = now
+
         if (now - lastKillTime < 3000) {
             killCombo++
         } else {
@@ -193,5 +198,6 @@ object KillEffect : Module("KillEffect", Category.RENDER) {
         attackedEntities.clear()
         killCombo = 0
         lastKillTime = 0
+        lastEffectTime = 0
     }
 }

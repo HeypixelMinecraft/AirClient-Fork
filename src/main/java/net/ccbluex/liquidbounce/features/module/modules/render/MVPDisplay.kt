@@ -48,7 +48,7 @@ object MVPDisplay : Module("MVPDisplay", Category.RENDER, gameDetecting = false)
     private val checkKillStreak by boolean("检测连杀", false)
     private val killStreakCount by int("连杀数量", 5, 2..50) { checkKillStreak }
 
-    private val displayStyle by choices("界面样式", arrayOf("经典", "极简", "霓虹", "渐变", "玻璃", "游戏", "卡片", "暗黑", "彩虹", "星尘"), "游戏")
+    private val displayStyle by choices("界面样式", arrayOf("简约", "优雅", "高级", "科技", "高雅"), "高级")
 
     private val displayX by int("显示位置X", 0, -500..500)
     private val displayY by int("显示位置Y", 130, -500..500)
@@ -497,248 +497,245 @@ object MVPDisplay : Module("MVPDisplay", Category.RENDER, gameDetecting = false)
         }
 
         when (displayStyle) {
-            "经典" -> renderClassicStyle(x, y, w, h, themeColor, alpha)
-            "极简" -> renderMinimalStyle(x, y, w, h, themeColor, alpha)
-            "霓虹" -> renderNeonStyle(x, y, w, h, themeColor, alpha)
-            "渐变" -> renderGradientStyle(x, y, w, h, themeColor, alpha)
-            "玻璃" -> renderGlassStyle(x, y, w, h, themeColor, alpha)
-            "游戏" -> renderGameStyle(x, y, w, h, themeColor, alpha)
-            "卡片" -> renderCardStyle(x, y, w, h, themeColor, alpha)
-            "暗黑" -> renderDarkStyle(x, y, w, h, themeColor, alpha)
-            "彩虹" -> renderRainbowStyle(x, y, w, h, themeColor, alpha)
-            "星尘" -> renderStardustStyle(x, y, w, h, themeColor, alpha)
-            else -> renderClassicStyle(x, y, w, h, themeColor, alpha)
+            "简约" -> renderMinimalStyle(x, y, w, h, themeColor, alpha)
+            "优雅" -> renderElegantStyle(x, y, w, h, themeColor, alpha)
+            "高级" -> renderPremiumStyle(x, y, w, h, themeColor, alpha)
+            "科技" -> renderTechStyle(x, y, w, h, themeColor, alpha)
+            "高雅" -> renderRefinedStyle(x, y, w, h, themeColor, alpha)
+            else -> renderPremiumStyle(x, y, w, h, themeColor, alpha)
         }
 
         GL11.glPopMatrix()
     }
 
-    private fun renderClassicStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(20, 20, 25, bgAlpha)
-        val borderColor = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
-
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 8F)
-        RenderUtils.drawRoundedBorder(x, y, x + w, y + h, 2F, borderColor.rgb, 8F)
-
-        drawContent(x, y, w, h, themeColor, alpha)
-    }
-
+    // 简约 - 横向单行条
     private fun renderMinimalStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
         val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(15, 15, 18, bgAlpha)
-        val lineColor = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
+        val bgColor = Color(247, 247, 248, bgAlpha)
+        val accent = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
+        val darkText = Color(42, 42, 46, alpha)
+        val dimText = Color(110, 110, 116, alpha)
 
         RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 4F)
-        RenderUtils.drawRect(x, y, x + 3, y + h, lineColor.rgb)
 
-        drawContent(x + 5, y, w - 5, h, themeColor, alpha)
-    }
-
-    private fun renderNeonStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val glowIntensity = (Math.sin(animationTick * 0.1) * 0.3 + 0.7).toFloat()
-        
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(10, 10, 15, bgAlpha)
-        val glowColor = Color(
-            (themeColor.red * glowIntensity).toInt().coerceIn(0, 255),
-            (themeColor.green * glowIntensity).toInt().coerceIn(0, 255),
-            (themeColor.blue * glowIntensity).toInt().coerceIn(0, 255),
-            alpha
-        )
-
-        for (i in 8 downTo 1) {
-            val glowAlpha = (alpha * 0.1F * i / 8F).toInt()
-            val expandedGlow = Color(glowColor.red, glowColor.green, glowColor.blue, glowAlpha)
-            RenderUtils.drawRoundedBorder(x - i, y - i, x + w + i, y + h + i, 1F, expandedGlow.rgb, 8F + i)
+        val avSize = 32
+        val avX = x + 12F
+        val avY = y + (h - avSize) / 2F
+        val skinLocation: ResourceLocation? = mc.thePlayer?.locationSkin
+        if (skinLocation != null) {
+            RenderUtils.drawHead(skinLocation, avX.toInt(), avY.toInt(), avSize, avSize, Color.WHITE)
         }
 
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 8F)
-        RenderUtils.drawRoundedBorder(x, y, x + w, y + h, 2F, glowColor.rgb, 8F)
+        val playerName = mc.thePlayer?.name ?: "Player"
+        val font = Fonts.fontSemibold35
+        val textY = y + h / 2F - font.fontHeight / 2F + 2F
+        var textX = avX + avSize + 12F
 
-        drawContent(x, y, w, h, themeColor, alpha)
+        font.drawString(firstLineText, textX, textY, accent.rgb)
+        textX += font.getStringWidth(firstLineText) + 8F
+        font.drawString("·", textX, textY, dimText.rgb)
+        textX += font.getStringWidth("·") + 8F
+
+        val secondLine = "$playerName$secondLineText"
+        font.drawString(secondLine, textX, textY, darkText.rgb)
+
+        if (selectedMvpMusicName != "无") {
+            textX += font.getStringWidth(secondLine) + 10F
+            val musicFont = Fonts.fontRegular30
+            musicFont.drawString("♪ $selectedMvpMusicName", textX, textY + 2F, dimText.rgb)
+        }
+
+        RenderUtils.drawRect(x + 8, y + h - 2, x + w - 8, y + h - 1, accent.rgb)
     }
 
-    private fun renderGradientStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val gradientOffset = (animationTick * 0.02F) % 1F
-        
-        val startColor = ClientThemesUtils.setColor("start", alpha)
-        val endColor = ClientThemesUtils.setColor("end", alpha)
-        
-        val gradientWidth = w * 2
-        val offset = (gradientOffset * gradientWidth).toInt()
-        
-        val dynamicStartColor = Color(
-            startColor.red,
-            startColor.green,
-            startColor.blue,
-            (alpha * 0.9F).toInt()
-        )
-        val dynamicEndColor = Color(
-            endColor.red,
-            endColor.green,
-            endColor.blue,
-            (alpha * 0.9F).toInt()
-        )
-        
-        RenderUtils.drawGradientRect(x, y, x + w, y + h, dynamicStartColor.rgb, dynamicEndColor.rgb, 0F)
-
+    // 优雅 - 居中竖向卡片 + 四角金饰
+    private fun renderElegantStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
         val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(20, 20, 25, bgAlpha)
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 8F)
-
-        drawContent(x, y, w, h, themeColor, alpha)
-    }
-
-    private fun renderGlassStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(255, 255, 255, (bgAlpha * 0.08F / 255F).toInt())
-        val borderColor = Color(255, 255, 255, (alpha * 0.2F).toInt())
-        val highlightColor = Color(255, 255, 255, (alpha * 0.1F).toInt())
+        val bgColor = Color(239, 232, 216, bgAlpha)
+        val gold = Color(201, 169, 97, alpha)
+        val goldDim = Color(201, 169, 97, (alpha * 0.5F).toInt())
+        val darkText = Color(92, 74, 46, alpha)
+        val dimText = Color(130, 110, 80, alpha)
 
         RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 12F)
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h / 3, highlightColor.rgb, 12F)
-        RenderUtils.drawRoundedBorder(x, y, x + w, y + h, 1F, borderColor.rgb, 12F)
 
-        val accentColor = Color(themeColor.red, themeColor.green, themeColor.blue, (alpha * 0.5F).toInt())
-        RenderUtils.drawRect(x + 10, y + h - 3, x + w - 10, y + h, accentColor.rgb)
+        // 四角L形金饰
+        val cornerLen = 8F
+        val cornerThick = 2F
+        val inset = 4F
+        // 左上
+        RenderUtils.drawRect(x + inset, y + inset, x + inset + cornerLen, y + inset + cornerThick, gold.rgb)
+        RenderUtils.drawRect(x + inset, y + inset, x + inset + cornerThick, y + inset + cornerLen, gold.rgb)
+        // 右上
+        RenderUtils.drawRect(x + w - inset - cornerLen, y + inset, x + w - inset, y + inset + cornerThick, gold.rgb)
+        RenderUtils.drawRect(x + w - inset - cornerThick, y + inset, x + w - inset, y + inset + cornerLen, gold.rgb)
+        // 左下
+        RenderUtils.drawRect(x + inset, y + h - inset - cornerThick, x + inset + cornerLen, y + h - inset, gold.rgb)
+        RenderUtils.drawRect(x + inset, y + h - inset - cornerLen, x + inset + cornerThick, y + h - inset, gold.rgb)
+        // 右下
+        RenderUtils.drawRect(x + w - inset - cornerLen, y + h - inset - cornerThick, x + w - inset, y + h - inset, gold.rgb)
+        RenderUtils.drawRect(x + w - inset - cornerThick, y + h - inset - cornerLen, x + w - inset, y + h - inset, gold.rgb)
 
-        drawContent(x, y, w, h, themeColor, alpha)
-    }
-
-    private fun renderGameStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(25, 25, 30, bgAlpha)
-        val topColor = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
-        val bottomColor = Color(
-            (themeColor.red * 0.3F).toInt(),
-            (themeColor.green * 0.3F).toInt(),
-            (themeColor.blue * 0.3F).toInt(),
-            alpha
-        )
-
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 6F)
-
-        RenderUtils.drawRect(x, y, x + w, y + 25, topColor.rgb)
-        RenderUtils.drawRect(x, y + h - 5, x + w, y + h, bottomColor.rgb)
-
-        val titleColor = Color(255, 255, 255, alpha)
-        Fonts.fontSemibold35.drawString(firstLineText, x + w / 2 - Fonts.fontSemibold35.getStringWidth(firstLineText) / 2, y + 7, titleColor.rgb)
-
-        val avatarX = x + 15
-        val avatarY = y + 35F
-        val smallAvatarSize = avatarSize * 2 / 3
-
+        val avSize = 28
+        val avX = x + w / 2F - avSize / 2F
+        val avY = y + 10F
         val skinLocation: ResourceLocation? = mc.thePlayer?.locationSkin
         if (skinLocation != null) {
-            RenderUtils.drawHead(skinLocation, avatarX.toInt(), avatarY.toInt(), smallAvatarSize, smallAvatarSize, Color.WHITE)
+            RenderUtils.drawHead(skinLocation, avX.toInt(), avY.toInt(), avSize, avSize, Color.WHITE)
         }
 
-        val textStartX = avatarX + smallAvatarSize + 12F
         val playerName = mc.thePlayer?.name ?: "Player"
+        val titleFont = Fonts.fontSemibold35
+        val bodyFont = Fonts.fontRegular30
+        val titleW = titleFont.getStringWidth(firstLineText)
+        titleFont.drawString(firstLineText, x + w / 2F - titleW / 2F, avY + avSize + 3F, gold.rgb)
+
         val secondLine = "$playerName$secondLineText"
-        
-        Fonts.fontSemibold35.drawString(secondLine, textStartX, avatarY + 5, Color(255, 255, 255, alpha).rgb)
+        val bodyW = bodyFont.getStringWidth(secondLine)
+        bodyFont.drawString(secondLine, x + w / 2F - bodyW / 2F, avY + avSize + 20F, darkText.rgb)
 
         if (selectedMvpMusicName != "无") {
-            val thirdLine = "$thirdLineText$selectedMvpMusicName"
-            Fonts.fontRegular30.drawString(thirdLine, textStartX, avatarY + 22F, Color(180, 180, 190, alpha).rgb)
+            val musicStr = "♪ $selectedMvpMusicName"
+            val mw = bodyFont.getStringWidth(musicStr)
+            bodyFont.drawString(musicStr, x + w / 2F - mw / 2F, y + h - 12F, dimText.rgb)
         }
     }
 
-    private fun renderCardStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
+    // 高级 - 左侧竖向金带
+    private fun renderPremiumStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
         val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val shadowColor = Color(0, 0, 0, (alpha * 0.3F).toInt())
-        val bgColor = Color(30, 30, 35, bgAlpha)
-        val accentColor = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
-
-        RenderUtils.drawRoundedRect(x + 4, y + 4, x + w + 4, y + h + 4, shadowColor.rgb, 10F)
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 10F)
-
-        RenderUtils.drawRoundedRect(x, y, x + w, y + 4, accentColor.rgb, 10F)
-
-        drawContent(x, y, w, h, themeColor, alpha)
-    }
-
-    private fun renderDarkStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(5, 5, 8, bgAlpha)
-        val subtleBorder = Color(40, 40, 45, alpha)
-        val accentGlow = Color(themeColor.red, themeColor.green, themeColor.blue, (alpha * 0.3F).toInt())
-
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 6F)
-        RenderUtils.drawRoundedBorder(x, y, x + w, y + h, 1F, subtleBorder.rgb, 6F)
-
-        RenderUtils.drawRoundedRect(x + 5, y + h - 8, x + w - 5, y + h - 5, accentGlow.rgb, 2F)
-
-        drawContent(x, y, w, h, themeColor, alpha)
-    }
-
-    private fun renderRainbowStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val rainbowColor = ClientThemesUtils.getColor(animationTick.toInt())
-        val bgColor = Color(20, 20, 25, bgAlpha)
-        val borderColor = Color(rainbowColor.red, rainbowColor.green, rainbowColor.blue, alpha)
+        val bgColor = Color(13, 13, 15, bgAlpha)
+        val gold = Color(212, 175, 55, alpha)
+        val goldDim = Color(212, 175, 55, (alpha * 0.55F).toInt())
+        val white = Color(245, 245, 245, alpha)
+        val dim = Color(160, 160, 165, alpha)
 
         RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 8F)
-        RenderUtils.drawRoundedBorder(x, y, x + w, y + h, 2F, borderColor.rgb, 8F)
+        // 左侧金带
+        RenderUtils.drawRect(x, y, x + 16, y + h, gold.rgb)
 
-        drawContent(x, y, w, h, rainbowColor, alpha)
-    }
-
-    private fun renderStardustStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
-        val bgColor = Color(10, 10, 20, bgAlpha)
-        val starColor = Color(255, 255, 255, (alpha * 0.6F).toInt())
-        val accentColor = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
-
-        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 10F)
-
-        val seed = animationTick.toInt()
-        for (i in 0 until 15) {
-            val starX = x + ((seed * 7 + i * 47) % w.toInt())
-            val starY = y + ((seed * 13 + i * 31) % h.toInt())
-            val starSize = 1 + (seed + i) % 2
-            val twinkle = (Math.sin((seed + i) * 0.2) * 0.5 + 0.5).toFloat()
-            val twinkleAlpha = (alpha * 0.3F * twinkle).toInt()
-            val twinkleColor = Color(255, 255, 255, twinkleAlpha)
-            RenderUtils.drawRect(starX.toFloat(), starY.toFloat(), starX + starSize.toFloat(), starY + starSize.toFloat(), twinkleColor.rgb)
+        // "MVP" 竖排
+        val ribbonFont = Fonts.fontSemibold35
+        val chars = firstLineText.toCharArray()
+        val charY = y + (h - chars.size * (ribbonFont.fontHeight + 2)) / 2F
+        for ((idx, c) in chars.withIndex()) {
+            val cw = ribbonFont.getStringWidth(c.toString())
+            ribbonFont.drawString(c.toString(), x + 8F - cw / 2F, charY + idx * (ribbonFont.fontHeight + 2), Color(20, 20, 20, alpha).rgb)
         }
 
-        RenderUtils.drawRoundedBorder(x, y, x + w, y + h, 1F, accentColor.rgb, 10F)
-
-        drawContent(x, y, w, h, themeColor, alpha)
-    }
-
-    private fun drawContent(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
-        val avatarX = x + 10
-        val avatarY = y + (h - avatarSize) / 2
-
+        val avSize = 36
+        val avX = x + 24F
+        val avY = y + (h - avSize) / 2F
         val skinLocation: ResourceLocation? = mc.thePlayer?.locationSkin
         if (skinLocation != null) {
-            RenderUtils.drawHead(skinLocation, avatarX.toInt(), avatarY.toInt(), avatarSize, avatarSize, Color.WHITE)
+            RenderUtils.drawHead(skinLocation, avX.toInt(), avY.toInt(), avSize, avSize, Color.WHITE)
         }
 
-        val textStartX = avatarX + avatarSize + 15F
-        val textStartY = y + 12F
-
-        val firstLineFont = Fonts.fontSemibold40
-        val secondLineFont = Fonts.fontSemibold35
-        val thirdLineFont = Fonts.fontRegular30
-
-        val firstLineColor = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
-        val secondLineColor = Color(255, 255, 255, alpha)
-        val thirdLineColor = Color(180, 180, 190, alpha)
-
-        firstLineFont.drawString(firstLineText, textStartX, textStartY, firstLineColor.rgb)
-
         val playerName = mc.thePlayer?.name ?: "Player"
-        val secondLine = "$playerName$secondLineText"
-        secondLineFont.drawString(secondLine, textStartX, textStartY + 20F, secondLineColor.rgb)
+        val nameFont = Fonts.fontSemibold35
+        val subFont = Fonts.fontRegular30
+        val textX = avX + avSize + 12F
+        nameFont.drawString(playerName, textX, avY + 2F, white.rgb)
+        subFont.drawString(secondLineText, textX, avY + 22F, goldDim.rgb)
 
         if (selectedMvpMusicName != "无") {
-            val thirdLine = "$thirdLineText$selectedMvpMusicName"
-            thirdLineFont.drawString(thirdLine, textStartX, textStartY + 38F, thirdLineColor.rgb)
+            subFont.drawString("♪ $selectedMvpMusicName", textX, avY + 40F, dim.rgb)
+        }
+    }
+
+    // 科技 - HUD 边角支架
+    private fun renderTechStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
+        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
+        val bgColor = Color(22, 25, 32, bgAlpha)
+        val accent = Color(themeColor.red, themeColor.green, themeColor.blue, alpha)
+        val accentDim = Color(themeColor.red, themeColor.green, themeColor.blue, (alpha * 0.45F).toInt())
+        val white = Color(235, 240, 248, alpha)
+        val dim = Color(150, 160, 178, alpha)
+
+        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 6F)
+
+        // 四角支架
+        val cl = 10F
+        val ct = 2F
+        val off = 3F
+        // 左上
+        RenderUtils.drawRect(x + off, y + off, x + off + cl, y + off + ct, accent.rgb)
+        RenderUtils.drawRect(x + off, y + off, x + off + ct, y + off + cl, accent.rgb)
+        // 右上
+        RenderUtils.drawRect(x + w - off - cl, y + off, x + w - off, y + off + ct, accent.rgb)
+        RenderUtils.drawRect(x + w - off - ct, y + off, x + w - off, y + off + cl, accent.rgb)
+        // 左下
+        RenderUtils.drawRect(x + off, y + h - off - ct, x + off + cl, y + h - off, accent.rgb)
+        RenderUtils.drawRect(x + off, y + h - off - cl, x + off + ct, y + h - off, accent.rgb)
+        // 右下
+        RenderUtils.drawRect(x + w - off - cl, y + h - off - ct, x + w - off, y + h - off, accent.rgb)
+        RenderUtils.drawRect(x + w - off - ct, y + h - off - cl, x + w - off, y + h - off, accent.rgb)
+
+        // 顶部标签
+        val labelFont = Fonts.fontSemibold35
+        labelFont.drawString("[ $firstLineText ]", x + off + cl + 4F, y + off + 1F, accent.rgb)
+
+        val avSize = 32
+        val avX = x + 14F
+        val avY = y + h / 2F - avSize / 2F + 4F
+        val skinLocation: ResourceLocation? = mc.thePlayer?.locationSkin
+        if (skinLocation != null) {
+            RenderUtils.drawHead(skinLocation, avX.toInt(), avY.toInt(), avSize, avSize, Color.WHITE)
+        }
+
+        val playerName = mc.thePlayer?.name ?: "Player"
+        val nameFont = Fonts.fontSemibold35
+        val subFont = Fonts.fontRegular30
+        val textX = avX + avSize + 12F
+        nameFont.drawString(playerName, textX, avY, white.rgb)
+        subFont.drawString(secondLineText, textX, avY + 18F, dim.rgb)
+
+        if (selectedMvpMusicName != "无") {
+            subFont.drawString("> $selectedMvpMusicName", textX, avY + 34F, accentDim.rgb)
+        }
+    }
+
+    // 高雅 - 上下双线 + 居中徽章
+    private fun renderRefinedStyle(x: Float, y: Float, w: Float, h: Float, themeColor: Color, alpha: Int) {
+        val bgAlpha = (alpha * backgroundAlpha / 255F).toInt()
+        val bgColor = Color(27, 42, 78, bgAlpha)
+        val silver = Color(214, 220, 232, alpha)
+        val silverDim = Color(214, 220, 232, (alpha * 0.5F).toInt())
+        val pearl = Color(240, 240, 245, alpha)
+        val dim = Color(170, 178, 200, alpha)
+
+        RenderUtils.drawRoundedRect(x, y, x + w, y + h, bgColor.rgb, 6F)
+
+        // 上下双横线
+        RenderUtils.drawRect(x + 10, y + 5, x + w - 10, y + 6, silverDim.rgb)
+        RenderUtils.drawRect(x + 10, y + h - 6, x + w - 10, y + h - 5, silverDim.rgb)
+        // 线条中央小菱形
+        val cx = x + w / 2F
+        RenderUtils.drawRect(cx - 2, y + 3, cx + 2, y + 8, silver.rgb)
+        RenderUtils.drawRect(cx - 2, y + h - 8, cx + 2, y + h - 3, silver.rgb)
+
+        val avSize = 28
+        val avX = cx - avSize / 2F
+        val avY = y + 11F
+        val skinLocation: ResourceLocation? = mc.thePlayer?.locationSkin
+        if (skinLocation != null) {
+            RenderUtils.drawHead(skinLocation, avX.toInt(), avY.toInt(), avSize, avSize, Color.WHITE)
+        }
+
+        val playerName = mc.thePlayer?.name ?: "Player"
+        val titleFont = Fonts.fontSemibold35
+        val bodyFont = Fonts.fontRegular30
+        val titleW = titleFont.getStringWidth(firstLineText)
+        titleFont.drawString(firstLineText, cx - titleW / 2F, avY + avSize + 2F, silver.rgb)
+
+        val secondLine = "$playerName$secondLineText"
+        val bodyW = bodyFont.getStringWidth(secondLine)
+        bodyFont.drawString(secondLine, cx - bodyW / 2F, avY + avSize + 19F, pearl.rgb)
+
+        if (selectedMvpMusicName != "无") {
+            val musicStr = "♪ $selectedMvpMusicName"
+            val mw = bodyFont.getStringWidth(musicStr)
+            bodyFont.drawString(musicStr, cx - mw / 2F, y + h - 14F, dim.rgb)
         }
     }
 

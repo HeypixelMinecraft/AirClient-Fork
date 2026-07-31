@@ -43,6 +43,7 @@ import net.minecraft.util.*
 import net.minecraft.world.WorldSettings
 import net.minecraftforge.event.ForgeEventFactory
 import org.lwjgl.input.Keyboard
+import org.lwjgl.opengl.GL11.*
 import java.awt.Color
 import kotlin.math.*
 
@@ -886,21 +887,26 @@ object Scaffold2 : Module("Scaffold2", Category.WORLD, Keyboard.KEY_F) {
             return@handler
         }
 
-        repeat(if (scaffoldMode == "Expand") expandLength + 1 else 2) {
-            val yaw = player.rotationYaw.toRadiansD()
-            val x = if (omniDirectionalExpand) -sin(yaw).roundToInt() else player.horizontalFacing.directionVec.x
-            val z = if (omniDirectionalExpand) cos(yaw).roundToInt() else player.horizontalFacing.directionVec.z
-            val blockPos = BlockPos(
-                player.posX + x * it,
-                if (shouldKeepLaunchPosition && launchY <= player.posY) launchY - 1.0 else player.posY - (if (player.posY == player.posY + 0.5) 0.0 else 1.0) - if (shouldGoDown) 1.0 else 0.0,
-                player.posZ + z * it
-            )
-            val placeInfo = PlaceInfo.get(blockPos)
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
+        try {
+            repeat(if (scaffoldMode == "Expand") expandLength + 1 else 2) {
+                val yaw = player.rotationYaw.toRadiansD()
+                val x = if (omniDirectionalExpand) -sin(yaw).roundToInt() else player.horizontalFacing.directionVec.x
+                val z = if (omniDirectionalExpand) cos(yaw).roundToInt() else player.horizontalFacing.directionVec.z
+                val blockPos = BlockPos(
+                    player.posX + x * it,
+                    if (shouldKeepLaunchPosition && launchY <= player.posY) launchY - 1.0 else player.posY - (if (player.posY == player.posY + 0.5) 0.0 else 1.0) - if (shouldGoDown) 1.0 else 0.0,
+                    player.posZ + z * it
+                )
+                val placeInfo = PlaceInfo.get(blockPos)
 
-            if (blockPos.isReplaceable && placeInfo != null) {
-                RenderUtils.drawBlockBox(blockPos, Color(markRed, markGreen, markBlue, markAlpha), false)
-                return@handler
+                if (blockPos.isReplaceable && placeInfo != null) {
+                    RenderUtils.drawBlockBox(blockPos, Color(markRed, markGreen, markBlue, markAlpha), false)
+                    return@handler
+                }
             }
+        } finally {
+            glPopAttrib()
         }
     }
 

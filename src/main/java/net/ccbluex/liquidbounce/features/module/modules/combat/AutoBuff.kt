@@ -11,7 +11,6 @@ import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
 import net.ccbluex.liquidbounce.ui.font.Fonts
-import net.ccbluex.liquidbounce.utils.extensions.sendUseItem
 import net.ccbluex.liquidbounce.utils.extensions.tryJump
 import net.ccbluex.liquidbounce.utils.inventory.InventoryUtils
 import net.ccbluex.liquidbounce.utils.inventory.InventoryUtils.serverOpenInventory
@@ -24,13 +23,15 @@ import net.ccbluex.liquidbounce.utils.rotation.Rotation
 import net.ccbluex.liquidbounce.utils.rotation.RotationSettings
 import net.ccbluex.liquidbounce.utils.rotation.RotationUtils.setTargetRotation
 import net.ccbluex.liquidbounce.utils.timing.MSTimer
-import net.minecraft.client.gui.inventory.GuiInventory
 import net.minecraft.client.settings.GameSettings
+import net.minecraft.client.settings.KeyBinding
 import net.minecraft.item.ItemBlock
 import net.minecraft.item.ItemFood
 import net.minecraft.item.ItemPotion
 import net.minecraft.item.ItemSword
+import net.minecraft.network.play.client.C08PacketPlayerBlockPlacement
 import net.minecraft.potion.Potion
+import net.minecraft.util.BlockPos
 import java.awt.Color
 
 /**
@@ -44,8 +45,6 @@ import java.awt.Color
 object AutoBuff : Module("AutoBuff", Category.COMBAT) {
 
     private val delay by int("Delay", 500, 100..2000)
-    private val openInventory by boolean("OpenInv", false)
-    private val simulateInventory by boolean("SimulateInventory", true) { !openInventory }
     private val groundDistance by float("GroundDistance", 2F, 0F..5F)
     private val throwMode by choices("ThrowMode", arrayOf("Jump", "Port", "None"), "Jump") { true }
     private val showTimer by boolean("ShowTimer", true)
@@ -73,21 +72,28 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
     // Potion drinking takes ~32 ticks (1.6 seconds at 20 tps)
     private val DRINK_DURATION_TICKS = 32
 
+    // Splash throw state: simulates a single right-click press
+    private var throwing = false
+    // Phase 1 = aiming down (rotation syncing to server), Phase 2 = ready to throw
+    private var throwPhase = 0
+
     // HUD display data
     private var remainingBuffs = listOf<String>()
     private var estimatedTimeMs = 0L
 
     override fun onDisable() {
-        stopDrinking()
+        stopUsing()
         remainingBuffs = emptyList()
         estimatedTimeMs = 0L
     }
 
-    private fun stopDrinking() {
-        if (drinking) {
+    private fun stopUsing() {
+        if (drinking || throwing) {
             mc.gameSettings.keyBindUseItem.pressed = GameSettings.isKeyDown(mc.gameSettings.keyBindUseItem)
             drinking = false
             drinkingTicks = 0
+            throwing = false
+            throwPhase = 0
         }
     }
 
@@ -113,32 +119,60 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
     }
 
     /**
-     * Handle drinking progress each tick
+     * Handle drinking/throwing progress each tick
      */
     val onUpdate = handler<UpdateEvent> {
+        val player = mc.thePlayer ?: run { stopUsing(); return@handler }
+
+        // Handle splash throw phase 2: rotation has been synced, now throw
+        if (throwPhase == 1) {
+            val stack = player.inventoryContainer?.getSlot(SilentHotbar.currentSlot + 36)?.stack
+            if (stack != null && stack.item is ItemPotion && stack.isSplashPotion()) {
+                // Rotation should now be synced to server, throw the potion
+                player.sendQueue?.addToSendQueue(
+                    C08PacketPlayerBlockPlacement(
+                        BlockPos(-1, -1, -1), 255,
+                        stack, 0f, 0f, 0f
+                    )
+                )
+                mc.gameSettings.keyBindUseItem.pressed = true
+                KeyBinding.onTick(mc.gameSettings.keyBindUseItem.keyCode)
+            }
+            throwPhase = 2 // Will release key next tick
+            return@handler
+        }
+
+        // Handle splash throw phase 3: release right-click after throw
+        if (throwPhase == 2) {
+            mc.gameSettings.keyBindUseItem.pressed = GameSettings.isKeyDown(mc.gameSettings.keyBindUseItem)
+            throwing = false
+            throwPhase = 0
+            msTimer.reset()
+            return@handler
+        }
+
         if (!drinking) return@handler
-        val player = mc.thePlayer ?: run { stopDrinking(); return@handler }
 
         drinkingTicks++
 
         // Check if player is still holding the potion
-        val heldStack = player.inventorySlot(SilentHotbar.currentSlot + 36).stack
+        val heldStack = player.inventoryContainer?.getSlot(SilentHotbar.currentSlot + 36)?.stack
         if (heldStack == null || heldStack.item !is ItemPotion || heldStack.isSplashPotion()) {
             // Lost the potion (slot changed, item consumed, etc.)
-            stopDrinking()
+            stopUsing()
             return@handler
         }
 
         // Check if drinking completed
         if (drinkingTicks >= DRINK_DURATION_TICKS) {
-            stopDrinking()
+            stopUsing()
             msTimer.reset()
         }
     }
 
     val onRotationUpdate = handler<RotationUpdateEvent> {
-        // Don't search for new potions while drinking
-        if (drinking) return@handler
+        // Don't search for new potions while drinking or throwing
+        if (drinking || throwing) return@handler
 
         if (!msTimer.hasTimePassed(delay) || mc.playerController.isInCreativeMode)
             return@handler
@@ -153,11 +187,12 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
 
         if (potionInHotbar != null) {
             val hotbarIndex = potionInHotbar - 36
-            val stack = player.inventorySlot(potionInHotbar).stack
-            val isSplash = stack?.isSplashPotion() == true
+            val stack = player.inventoryContainer?.getSlot(potionInHotbar)?.stack
+            if (stack == null || stack.item !is ItemPotion) return@handler
+            val isSplash = stack.isSplashPotion()
 
             if (isSplash) {
-                // === Splash potion: switch slot → look down → throw ===
+                // === Splash potion: switch slot → look down → (next tick) throw ===
 
                 if (player.onGround && throwMode != "None") {
                     when (throwMode.lowercase()) {
@@ -178,24 +213,22 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
                 SilentHotbar.selectSlotSilently(
                     this,
                     hotbarIndex,
-                    ticksUntilReset = 1,
+                    ticksUntilReset = 3,
                     immediate = true,
                     render = false,
                     resetManually = true
                 )
 
-                // Get the correct stack from the silent slot
-                val potionStack = player.inventorySlot(SilentHotbar.currentSlot + 36).stack ?: return@handler
-
-                // Always set rotation to look down for splash potions
+                // Set rotation to look straight down for splash potions
+                // Phase 1: just aim down, throw happens next tick after rotation syncs to server
                 setTargetRotation(
-                    Rotation(player.rotationYaw, nextFloat(80F, 90F)).fixedSensitivity(),
+                    Rotation(player.rotationYaw, 90F).fixedSensitivity(),
                     options
                 )
 
-                // Throw the splash potion
-                player.sendUseItem(potionStack)
-                msTimer.reset()
+                throwing = true
+                throwPhase = 1
+
                 return@handler
             } else {
                 // === Drinkable potion: switch slot → hold right-click ===
@@ -212,6 +245,7 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
 
                 // Start holding right-click to drink
                 mc.gameSettings.keyBindUseItem.pressed = true
+                KeyBinding.onTick(mc.gameSettings.keyBindUseItem.keyCode)
                 drinking = true
                 drinkingTicks = 0
                 return@handler
@@ -220,9 +254,6 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
 
         // Find buff potion in inventory (9-35) and move to hotbar
         val potionInInventory = findBuffPotion(9, 35) ?: return@handler
-
-        if (openInventory && mc.currentScreen !is GuiInventory)
-            return@handler
 
         val targetSlot = if (InventoryUtils.hasSpaceInHotbar()) {
             // Has empty slot: shift-click into it
@@ -233,8 +264,11 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
             potionInInventory to (swapSlot - 36)
         }
 
-        if (simulateInventory)
+        // 使用 serverOpenInventory 模拟背包打开（与 InventoryManager 共享状态，避免冲突）
+        val wasInventoryOpen = serverOpenInventory
+        if (!wasInventoryOpen) {
             serverOpenInventory = true
+        }
 
         if (targetSlot is Int) {
             mc.playerController.windowClick(0, targetSlot, 0, 1, player)
@@ -243,8 +277,10 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
             mc.playerController.windowClick(0, pair.first, pair.second, 2, player)
         }
 
-        if (simulateInventory && mc.currentScreen !is GuiInventory)
+        // 操作完成后关闭模拟背包（仅当是我们打开的时才关闭）
+        if (!wasInventoryOpen) {
             serverOpenInventory = false
+        }
 
         msTimer.reset()
     }
@@ -361,7 +397,7 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
         val x = 4f
         var y = 4f
 
-        val title = if (drinking) "AutoBuff §7(drinking ${drinkingTicks}/${DRINK_DURATION_TICKS})" else "AutoBuff"
+        val title = if (drinking) "AutoBuff §7(drinking ${drinkingTicks}/${DRINK_DURATION_TICKS})" else if (throwing) "AutoBuff §7(throwing)" else "AutoBuff"
         font.drawString(title, x, y, Color(255, 255, 255).rgb, true)
         y += font.FONT_HEIGHT + 2f
 
@@ -377,5 +413,5 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
     }
 
     override val tag
-        get() = if (drinking) "drinking" else if (remainingBuffs.isNotEmpty()) "${remainingBuffs.size}buffs" else null
+        get() = if (drinking) "drinking" else if (throwing) "throwing" else if (remainingBuffs.isNotEmpty()) "${remainingBuffs.size}buffs" else null
 }

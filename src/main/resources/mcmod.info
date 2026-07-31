@@ -1,6 +1,6 @@
 [
   {
-    "modid": "Air Client",
+    "modid": "airclient",
     "name": "Air Client",
     "description": "Air Hack Client",
     "version": "${version}",

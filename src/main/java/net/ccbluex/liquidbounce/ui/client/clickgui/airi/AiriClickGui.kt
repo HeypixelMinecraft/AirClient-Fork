@@ -1340,37 +1340,25 @@ class AiriClickGui : GuiScreen() {
         if (mouseButton != 0) return
         val barY = controlTop + 5f
         val barH = controlBarH - 10f
-        val pad = 6f
+        val layout = controlBarLayout()
 
-        val modeW = 52f
-        val interactW = 58f
-        val modelW = 78f
-        val thinkW = 52f
-        val thinkStrW = 52f
-        val roleW = 50f
-        val gap = 3f
-
-        var cx = contentX + pad
-        if (isHovered(cx, barY, modeW, barH, mouseX, mouseY)) { toggleDropdown("mode"); return }
-        cx += modeW + gap
-        if (isHovered(cx, barY, interactW, barH, mouseX, mouseY)) {
-            AiriSettings.interactionAllowed = !AiriSettings.interactionAllowed
-            saveConfig(airiConfig)
+        for (btn in layout) {
+            if (!isHovered(btn.x, barY, btn.w, barH, mouseX, mouseY)) continue
+            if (btn.isToggle) {
+                when (btn.id) {
+                    "interact" -> {
+                        AiriSettings.interactionAllowed = !AiriSettings.interactionAllowed
+                        saveConfig(airiConfig)
+                    }
+                    "think" -> {
+                        AiriSettings.thinkEnabled = !AiriSettings.thinkEnabled
+                        saveConfig(airiConfig)
+                    }
+                }
+            } else {
+                toggleDropdown(btn.id)
+            }
             return
-        }
-        cx += interactW + gap
-        if (isHovered(cx, barY, modelW, barH, mouseX, mouseY)) { toggleDropdown("model"); return }
-        cx += modelW + gap
-        if (isHovered(cx, barY, thinkW, barH, mouseX, mouseY)) {
-            AiriSettings.thinkEnabled = !AiriSettings.thinkEnabled
-            saveConfig(airiConfig)
-            return
-        }
-        cx += thinkW + gap
-        if (isHovered(cx, barY, thinkStrW, barH, mouseX, mouseY)) { toggleDropdown("thinkstr"); return }
-        cx += thinkStrW + gap
-        if (AiriSettings.mode == "roleplay" && isHovered(cx, barY, roleW, barH, mouseX, mouseY)) {
-            toggleDropdown("role"); return
         }
     }
 
@@ -1384,30 +1372,23 @@ class AiriClickGui : GuiScreen() {
             return
         }
         val id = openDropdown ?: return
-
-        val pad = 6f
         val barY = controlTop + 5f
         val barH = controlBarH - 10f
-        val modeW = 52f; val interactW = 58f; val modelW = 78f
-        val thinkW = 52f; val thinkStrW = 52f; val roleW = 50f; val gap = 3f
-        var cx = contentX + pad
-        val cxMode = cx; cx += modeW + gap
-        cx += interactW + gap
-        val cxModel = cx; cx += modelW + gap
-        cx += thinkW + gap
-        val cxThinkStr = cx; cx += thinkStrW + gap
-        val cxRole = cx
 
-        val (dropX, dropW, items) = when (id) {
-            "mode" -> Triple(cxMode, modeW, listOf("chat", "script", "roleplay"))
-            "model" -> Triple(cxModel, modelW, AiriSettings.models.toList())
-            "thinkstr" -> Triple(cxThinkStr, thinkStrW, listOf("0.00", "0.25", "0.50", "0.75", "1.00"))
-            "role" -> Triple(cxRole, roleW, listOf("prankster", "helper", "observer", "custom"))
+        val btn = controlBarLayout().firstOrNull { it.id == id } ?: run { openDropdown = null; return }
+        val dropX = btn.x
+        val dropW = btn.w
+
+        val items = when (id) {
+            "mode" -> listOf("chat", "script", "roleplay")
+            "model" -> AiriSettings.models.toList()
+            "thinkstr" -> listOf("0.00", "0.25", "0.50", "0.75", "1.00")
+            "role" -> listOf("prankster", "helper", "observer", "custom")
             else -> { openDropdown = null; return }
         }
 
         val dropY = barY + barH + 2f
-        val itemH = 18f
+        val itemH = 16f
         val dropH = items.size * itemH + 4f
         val actualDropX = dropX.coerceIn(x + 4f, x + w - dropW - 4f)
         val actualDropY = dropY.coerceAtMost(y + h - dropH - 4f)
@@ -1461,10 +1442,8 @@ class AiriClickGui : GuiScreen() {
     }
 
     private fun handleSidebarSliderDrag(mouseX: Int) {
-        val contentX = contentX
-        val contentW = contentW
         val sx = contentX + 13f
-        val sliderW = contentW - 27f
+        val sliderW = contentW - 26f
         val progress = ((mouseX - sx) / sliderW).coerceIn(0f, 1f)
 
         when (sidebarDraggingSlider) {
@@ -1552,7 +1531,7 @@ class AiriClickGui : GuiScreen() {
                 handleSidebarSliderDrag(mouseX)
                 return
             }
-            sy += 4f
+            sy += 18f
         }
 
         // ===== Blur toggle =====
@@ -1573,7 +1552,7 @@ class AiriClickGui : GuiScreen() {
                 handleSidebarSliderDrag(mouseX)
                 return
             }
-            sy += 4f
+            sy += 18f
         }
 
         // ===== API Configuration =====

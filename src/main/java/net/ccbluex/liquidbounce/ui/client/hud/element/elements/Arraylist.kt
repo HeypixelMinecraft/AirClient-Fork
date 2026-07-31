@@ -6,6 +6,7 @@ package net.ccbluex.liquidbounce.ui.client.hud.element.elements
 
 import net.ccbluex.liquidbounce.LiquidBounce.moduleManager
 import net.ccbluex.liquidbounce.config.Configurable
+import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
 import net.ccbluex.liquidbounce.features.module.modules.misc.GameDetector
 import net.ccbluex.liquidbounce.ui.client.hud.designer.GuiHudDesigner
@@ -195,6 +196,8 @@ class Arraylist(
         "InactiveModulesStyle", arrayOf("Normal", "Color", "Hide"), "Color"
     ) { GameDetector.state }
 
+    private val hideRender by boolean("HideRender", false)
+
     private var x2 = 0
     private var y2 = 0F
 
@@ -275,7 +278,7 @@ class Arraylist(
             val padding = if (displayIcons) 15 else 0
 
             for (module in moduleManager) {
-                val shouldShow = (!module.isHidden && module.state && (inactiveStyle != "Hide" || module.isActive))
+                val shouldShow = (!module.isHidden && module.state && (inactiveStyle != "Hide" || module.isActive) && !(hideRender && module.category == Category.RENDER))
 
                 if (!shouldShow && module.slide <= 0f) continue
 
@@ -320,6 +323,9 @@ class Arraylist(
             val actualGradientX = 1f safeDiv gradientX
             val actualGradientY = 1f safeDiv gradientY
 
+            // 缓存上一个模块的显示字符串宽度，避免在循环内重复调用 getDisplayString + getStringWidth
+            var prevDisplayStringWidth = 0
+
             modules.forEachIndexed { index, module ->
                 var yPos =
                     (if (side.vertical == Vertical.DOWN) -textSpacer else textSpacer) * if (side.vertical == Vertical.DOWN) index + 1 else index
@@ -356,8 +362,8 @@ class Arraylist(
                 val displayStringWidth = font.getStringWidth(displayString)
                 val moduleNameWidth = font.getStringWidth(moduleName)
 
-                val previousDisplayString = getDisplayString(modules[(if (index > 0) index else 1) - 1])
-                val previousDisplayStringWidth = font.getStringWidth(previousDisplayString)
+                // 使用缓存的上一个宽度，避免重复计算 getDisplayString + getStringWidth
+                val previousDisplayStringWidth = if (index == 0) displayStringWidth else prevDisplayStringWidth
 
                 when (side.horizontal) {
                     Horizontal.RIGHT, Horizontal.MIDDLE -> {
@@ -853,6 +859,9 @@ class Arraylist(
 
                     drawImage(resource, iconX, yPos, 12, 12, Color(iconColor, true))
                 }
+
+                // 更新缓存，供下一次迭代使用
+                prevDisplayStringWidth = displayStringWidth
             }
 
             if (mc.currentScreen is GuiHudDesigner) {
@@ -888,7 +897,7 @@ class Arraylist(
     }
 
     override fun updateElement() {
-        modules = moduleManager.filter { it.slide > 0 && !it.isHidden }
+        modules = moduleManager.filter { it.slide > 0 && !it.isHidden && !(hideRender && it.category == Category.RENDER) }
             .sortedBy { -font.getStringWidth(getDisplayString(it)) }
     }
 }

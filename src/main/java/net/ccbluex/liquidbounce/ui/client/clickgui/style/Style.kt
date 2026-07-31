@@ -19,8 +19,6 @@ import net.ccbluex.liquidbounce.utils.timing.WaitTickUtils
 import net.ccbluex.liquidbounce.utils.ui.EditableText
 import org.lwjgl.input.Mouse
 import java.awt.Color
-import java.math.BigDecimal
-import java.math.RoundingMode
 import kotlin.math.max
 
 abstract class Style : MinecraftInstance {
@@ -60,9 +58,8 @@ abstract class Style : MinecraftInstance {
     }
 
     protected fun round(v: Float): Float {
-        var bigDecimal = BigDecimal(v.toString())
-        bigDecimal = bigDecimal.setScale(if (decimalPlaces(v) == 3) 3 else 2, RoundingMode.HALF_UP)
-        return bigDecimal.toFloat()
+        val scale = if (decimalPlaces(v) == 3) 1000f else 100f
+        return Math.round(v * scale) / scale
     }
 
     protected fun getHoverColor(color: Color, hover: Int, inactiveModule: Boolean = false): Int {

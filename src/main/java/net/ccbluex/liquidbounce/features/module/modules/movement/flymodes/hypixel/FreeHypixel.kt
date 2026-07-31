@@ -9,8 +9,7 @@ import net.ccbluex.liquidbounce.features.module.modules.movement.Fly.startY
 import net.ccbluex.liquidbounce.features.module.modules.movement.flymodes.FlyMode
 import net.ccbluex.liquidbounce.utils.extensions.stop
 import net.ccbluex.liquidbounce.utils.timing.TickTimer
-import java.math.BigDecimal
-import java.math.RoundingMode
+
 
 object FreeHypixel : FlyMode("FreeHypixel") {
     private val timer = TickTimer()
@@ -36,7 +35,7 @@ object FreeHypixel : FlyMode("FreeHypixel") {
             mc.thePlayer.stop()
         }
 
-        if (startY == BigDecimal(mc.thePlayer.posY).setScale(3, RoundingMode.HALF_DOWN).toDouble())
+        if (startY == Math.round(mc.thePlayer.posY * 1000.0) / 1000.0)
             timer.update()
     }
 

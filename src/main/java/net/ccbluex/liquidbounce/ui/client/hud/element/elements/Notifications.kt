@@ -20,6 +20,7 @@ import net.ccbluex.liquidbounce.utils.extensions.lerpWith
 import net.ccbluex.liquidbounce.utils.render.ColorUtils.withAlpha
 import net.ccbluex.liquidbounce.utils.render.RenderUtils
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.deltaTime
+import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRect
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorder
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
 import net.minecraft.util.ResourceLocation
@@ -34,6 +35,7 @@ class Notifications(
 ) : Element("Notifications", x, y, scale, side) {
 
     val horizontalFade by choices("HorizontalFade", arrayOf("InOnly", "OutOnly", "Both", "None"), "OutOnly")
+    val style by choices("Style", arrayOf("Default", "Modern", "Outline", "Stamp"), "Default")
     val padding by int("Padding", 5, 1..20)
     val roundRadius by float("RoundRadius", 3f, 0f..10f)
     val color by color("BackgroundColor", Color.BLACK.withAlpha(128))
@@ -160,7 +162,7 @@ class Notification(
     }
 
     fun drawNotification(element: Notifications): Boolean {
-        val notificationWidth = maxTextLength + ICON_SIZE + 16F
+        val notificationWidth = getNotificationWidth(element)
         val extraSpace = 4F
 
         val currentX = when (fadeState) {
@@ -169,30 +171,13 @@ class Notification(
             else -> x
         }
 
-        drawRoundedRect(0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y, element.color.rgb, element.roundRadius)
-
-        if (element.renderBorder) {
-            drawRoundedBorder(
-                0F,
-                -y - MAX_HEIGHT,
-                -currentX - extraSpace,
-                -y,
-                element.borderWidth,
-                element.borderColor.rgb,
-                element.roundRadius
-            )
+        // 根据样式分支渲染
+        when (element.style) {
+            "Modern" -> drawModernStyle(element, currentX, extraSpace)
+            "Outline" -> drawOutlineStyle(element, currentX, extraSpace, notificationWidth)
+            "Stamp" -> drawStampStyle(element, currentX, extraSpace)
+            else -> drawDefaultStyle(element, currentX, extraSpace)
         }
-
-        val nearTopSpot = -y - MAX_HEIGHT + 10
-
-        Fonts.fontSemibold40.drawString(title, ICON_SIZE + 8F - currentX, nearTopSpot - 5, Color.WHITE.rgb)
-        Fonts.fontSemibold35.drawString(
-            description, ICON_SIZE + 8F - currentX, nearTopSpot + Fonts.fontSemibold40.fontHeight - 2, Int.MAX_VALUE
-        )
-
-        RenderUtils.drawImage(
-            severityType.path, -currentX + 2, -y - MAX_HEIGHT + 4, ICON_SIZE, ICON_SIZE, radius = element.roundRadius
-        )
 
         val delta = deltaTime
 
@@ -212,7 +197,7 @@ class Notification(
             FadeState.STAY -> {
                 if (textLength != maxTextLength) {
                     maxTextLength = maxOf(textLength, maxTextLength)
-                    x = maxTextLength + ICON_SIZE + 16F
+                    x = getNotificationWidth(element)
                     fadeStep = x
                 }
                 stay -= delta
@@ -232,5 +217,152 @@ class Notification(
         }
 
         return false
+    }
+
+    /**
+     * 不同样式的通知宽度计算。
+     * Default/Toast/Banner 沿用原宽度；Modern 去掉图标改用左侧色条；Compact 只显示标题更窄。
+     */
+    private fun getNotificationWidth(element: Notifications): Float = when (element.style) {
+        "Modern" -> maxTextLength + 24F
+        "Outline" -> maxTextLength + ICON_SIZE + 16F
+        "Stamp" -> maxTextLength + ICON_SIZE + 30F
+        else -> maxTextLength + ICON_SIZE + 16F
+    }
+
+    /**
+     * 根据 severity 类型获取柔和的强调色（避开霓虹/赛博/AI配色）。
+     */
+    private fun severityAccentColor(): Color = when (severityType) {
+        Notifications.SeverityType.SUCCESS -> Color(120, 175, 105)      // 柔绿
+        Notifications.SeverityType.RED_SUCCESS -> Color(190, 95, 75)    // 砖红
+        Notifications.SeverityType.INFO -> Color(105, 140, 175)         // 雾蓝
+        Notifications.SeverityType.WARNING -> Color(200, 170, 80)       // 暖黄
+        Notifications.SeverityType.ERROR -> Color(195, 85, 70)          // 朱红
+    }
+
+    // ===== Default 样式（保留原逻辑） =====
+    private fun drawDefaultStyle(element: Notifications, currentX: Float, extraSpace: Float) {
+        drawRoundedRect(0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y, element.color.rgb, element.roundRadius)
+
+        if (element.renderBorder) {
+            drawRoundedBorder(
+                0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y,
+                element.borderWidth, element.borderColor.rgb, element.roundRadius
+            )
+        }
+
+        val nearTopSpot = -y - MAX_HEIGHT + 10
+        Fonts.fontSemibold40.drawString(title, ICON_SIZE + 8F - currentX, nearTopSpot - 5, Color.WHITE.rgb)
+        Fonts.fontSemibold35.drawString(
+            description, ICON_SIZE + 8F - currentX, nearTopSpot + Fonts.fontSemibold40.fontHeight - 2, Int.MAX_VALUE
+        )
+        RenderUtils.drawImage(
+            severityType.path, -currentX + 2, -y - MAX_HEIGHT + 4, ICON_SIZE, ICON_SIZE, radius = element.roundRadius
+        )
+    }
+
+    // ===== Modern 样式：现代极简卡片，左侧 severity 色条，无图标 =====
+    private fun drawModernStyle(element: Notifications, currentX: Float, extraSpace: Float) {
+        val bgColor = Color(44, 42, 40, 225)
+        val accent = severityAccentColor()
+
+        drawRoundedRect(0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y, bgColor.rgb, element.roundRadius)
+
+        // 左侧 severity 色条（贴近左边缘）
+        drawRect(-currentX + 2F, -y - MAX_HEIGHT + 5F, -currentX + 5F, -y - 5F, accent.rgb)
+
+        if (element.renderBorder) {
+            drawRoundedBorder(
+                0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y,
+                element.borderWidth, element.borderColor.rgb, element.roundRadius
+            )
+        }
+
+        val nearTopSpot = -y - MAX_HEIGHT + 10
+        // 标题用强调色，描述用浅灰
+        Fonts.fontSemibold40.drawString(title, -currentX + 14F, nearTopSpot - 5, Color(245, 240, 232).rgb)
+        Fonts.fontSemibold35.drawString(
+            description, -currentX + 14F, nearTopSpot + Fonts.fontSemibold40.fontHeight - 2,
+            Color(180, 175, 168).rgb
+        )
+    }
+
+    // ===== Outline 样式：线框描边，透明底+severity色描边+标题severity色+描述白色 =====
+    private fun drawOutlineStyle(element: Notifications, currentX: Float, extraSpace: Float, notificationWidth: Float) {
+        val accent = severityAccentColor()
+
+        // 透明底色（深色半透明，让描边可见）
+        drawRoundedRect(0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y, Color(0, 0, 0, 60).rgb, element.roundRadius)
+
+        // severity 色描边
+        drawRoundedBorder(
+            0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y,
+            1.5F, accent.rgb, element.roundRadius
+        )
+
+        // 顶部 severity 细线装饰
+        drawRect(-currentX - extraSpace + element.roundRadius, -y - MAX_HEIGHT,
+            -element.roundRadius, -y - MAX_HEIGHT + 1F, accent.rgb)
+
+        // 图标
+        RenderUtils.drawImage(
+            severityType.path, -currentX + 2, -y - MAX_HEIGHT + 4, ICON_SIZE, ICON_SIZE, radius = element.roundRadius
+        )
+
+        // 标题用 severity 色，描述用浅灰
+        val nearTopSpot = -y - MAX_HEIGHT + 10
+        Fonts.fontSemibold40.drawString(title, ICON_SIZE + 8F - currentX, nearTopSpot - 5, accent.rgb)
+        Fonts.fontSemibold35.drawString(
+            description, ICON_SIZE + 8F - currentX, nearTopSpot + Fonts.fontSemibold40.fontHeight - 2,
+            Color(200, 196, 190).rgb
+        )
+    }
+
+    // ===== Stamp 样式：邮戳印章，severity色圆形图章居中+图标在圆环正中央+右侧标题描述 =====
+    private fun drawStampStyle(element: Notifications, currentX: Float, extraSpace: Float) {
+        val bgColor = Color(250, 245, 232, 240)      // 信封米色
+        val stampColor = severityAccentColor()         // 邮戳色=severity色
+        val textColor = Color(44, 40, 34)             // 墨色
+        val subColor = Color(130, 120, 105)           // 次要文字
+
+        drawRoundedRect(0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y, bgColor.rgb, element.roundRadius)
+
+        if (element.renderBorder) {
+            drawRoundedBorder(
+                0F, -y - MAX_HEIGHT, -currentX - extraSpace, -y,
+                element.borderWidth, element.borderColor.rgb, element.roundRadius
+            )
+        }
+
+        // 邮戳圆形区域：图标 + 圆环在左侧，垂直居中
+        val stampPadLeft = 4F
+        val stampCX = -currentX + stampPadLeft + ICON_SIZE / 2F
+        val stampCY = -y - MAX_HEIGHT / 2F
+        val stampR = ICON_SIZE / 2F + 3F
+
+        // 外圈（severity 色半透明）
+        drawRoundedRect(stampCX - stampR, stampCY - stampR, stampCX + stampR, stampCY + stampR,
+            Color(stampColor.red, stampColor.green, stampColor.blue, 100).rgb, stampR)
+        // 内圈（背景色，形成圆环效果）
+        drawRoundedRect(stampCX - stampR + 2F, stampCY - stampR + 2F, stampCX + stampR - 2F, stampCY + stampR - 2F,
+            bgColor.rgb, stampR - 2F)
+
+        // 图标在圆环正中央
+        RenderUtils.drawImage(
+            severityType.path,
+            (stampCX - ICON_SIZE / 2F).toInt(),
+            (stampCY - ICON_SIZE / 2F).toInt(),
+            ICON_SIZE, ICON_SIZE, radius = element.roundRadius
+        )
+
+        // 右侧：标题 + 描述（垂直居中）
+        val textStartX = stampCX + stampR + 8F
+        val textCenterY = -y - MAX_HEIGHT / 2F
+        Fonts.fontSemibold40.drawString(title, textStartX,
+            textCenterY - Fonts.fontSemibold40.fontHeight / 2F - 2F, stampColor.rgb)
+        Fonts.fontSemibold35.drawString(
+            description, textStartX,
+            textCenterY + Fonts.fontSemibold40.fontHeight / 2F + 2F, subColor.rgb)
     }
 }

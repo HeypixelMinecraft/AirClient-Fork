@@ -1646,7 +1646,7 @@ object RenderUtils : MinecraftInstance {
         for (cap in caps) setGlCap(cap, true)
     }
 
-    fun disableGlCap(cap: Int) = setGlCap(cap, true)
+    fun disableGlCap(cap: Int) = setGlCap(cap, false)
 
     fun disableGlCap(vararg caps: Int) {
         for (cap in caps) setGlCap(cap, false)

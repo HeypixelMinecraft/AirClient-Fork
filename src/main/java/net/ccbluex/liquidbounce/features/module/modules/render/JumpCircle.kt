@@ -35,7 +35,6 @@ import net.minecraft.util.ResourceLocation
 import net.minecraft.util.Vec3
 import org.lwjgl.opengl.GL11.*
 import java.awt.Color
-import java.util.concurrent.CopyOnWriteArrayList
 
 object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false) {
     private val colorMode by choices("Color", arrayOf("Custom", "Theme"), "Theme")
@@ -56,11 +55,16 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
     private val supernaturalIcon = ResourceLocation("$staticLoc/circle2.png")
 
     private val animatedGroups = listOf(mutableListOf<ResourceLocation>(), mutableListOf())
-    private val circles: MutableList<JumpData> = CopyOnWriteArrayList()
+    // onUpdate/onRender3D/onWorld 均在主线程触发，无需 CopyOnWriteArrayList
+    private val circles: MutableList<JumpData> = mutableListOf()
+    // 复用过滤缓冲，避免每帧分配新的 ArrayList
+    private val circlesRemaining: MutableList<JumpData> = mutableListOf()
     private var hasJumped = false
 
     private val tessellator = Tessellator.getInstance()
     private val worldRenderer = tessellator.worldRenderer
+    // 缓存上次设置 blur/mipmap 的纹理，避免每帧重复调用 setBlurMipmap
+    private var lastBlurTexture: ResourceLocation? = null
 
     init {
         if (animatedGroups.all { it.isEmpty() }) {
@@ -134,10 +138,15 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
         }
         GlStateManager.disableLighting()
         setupDrawCircles {
-            // 使用索引遍历避免 removeIf + indexOf 造成的 O(n²) 性能问题
-            val remaining = mutableListOf<JumpData>()
+            // 复用缓冲：先渲染所有圆，再一次性重建列表，避免每帧分配新的 ArrayList
+            circlesRemaining.clear()
+            var anyExpired = false
             circles.forEachIndexed { index, it ->
                 val progress = ((runTimeTicks + partialTick) - it.endTime) / lifeTime
+                if (progress >= 1F) {
+                    anyExpired = true
+                    return@forEachIndexed
+                }
                 val radius = circleRadius.lerpWith(progress)
                 if(useTexture){
                     renderTexturedCircle(
@@ -151,23 +160,27 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
                 } else {
                     renderSimpleCircle(it.pos, radius, progress)
                 }
-                if (progress < 1F) remaining.add(it)
+                circlesRemaining.add(it)
             }
-            if (remaining.size != circles.size) {
+            if (anyExpired) {
                 circles.clear()
-                circles.addAll(remaining)
+                circles.addAll(circlesRemaining)
             }
         }
         GlStateManager.color(1f, 1f, 1f, 1f)
+        GlStateManager.disableBlend()
+        GlStateManager.depthMask(true)
         GlStateManager.enableLighting()
     }
 
     override fun onDisable() {
         circles.clear()
+        lastBlurTexture = null
     }
 
     val onWorld = handler<WorldEvent> {
         circles.clear()
+        lastBlurTexture = null
     }
 
     private fun renderSimpleCircle(pos: Vec3, radius: Float, timeFraction: Float){
@@ -228,7 +241,11 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
         val blue2 = (color2.rgb and 0xFF) / 255f
         val alpha2 = ((color2.rgb shr 24) and 0xFF) / 255f
         mc.textureManager.bindTexture(textureResource)
-        mc.textureManager.getTexture(textureResource).setBlurMipmap(true, true)
+        // 仅在纹理切换时调用 setBlurMipmap，避免每帧重复 GL 调用
+        if (lastBlurTexture != textureResource) {
+            mc.textureManager.getTexture(textureResource).setBlurMipmap(true, true)
+            lastBlurTexture = textureResource
+        }
         GlStateManager.pushMatrix()
         GlStateManager.translate(pos.xCoord - circleRadius / 2.0, pos.yCoord, pos.zCoord - circleRadius / 2.0)
         GlStateManager.rotate(90f, 1f, 0f, 0f)

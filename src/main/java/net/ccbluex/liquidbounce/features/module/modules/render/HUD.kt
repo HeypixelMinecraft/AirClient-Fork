@@ -15,8 +15,7 @@ import net.ccbluex.liquidbounce.ui.client.hud.element.Element.Companion.MAX_GRAD
 import net.ccbluex.liquidbounce.utils.render.ColorSettingsFloat
 import net.ccbluex.liquidbounce.utils.render.ColorSettingsInteger
 import net.ccbluex.liquidbounce.utils.render.RenderUtils
-import net.ccbluex.liquidbounce.utils.render.shader.KawaseBlur
-import net.ccbluex.liquidbounce.utils.render.shader.ShaderElement
+
 import net.minecraft.client.gui.Gui
 import net.minecraft.client.gui.GuiChat
 import net.minecraft.client.gui.ScaledResolution
@@ -66,7 +65,7 @@ object HUD : Module("HUD", Category.RENDER, gameDetecting = false, defaultState 
 
     val inventoryParticle by boolean("InventoryParticle", false)
     private val blur by boolean("Blur", false)
-    private val splashBackgroundValue = choices("启动背景", arrayOf("splash", "qcf", "cat", "MCDOG"), ClientConfiguration.splashBackground)
+    private val splashBackgroundValue = choices("启动背景", arrayOf("splash", "miku", "Mortis", "ba", "cat", "girl", "girl2", "qcf", "soyo", "youxiang"), ClientConfiguration.splashBackground)
     val splashBackground by splashBackgroundValue
 
     // 必须在 splashBackgroundValue 声明之后调用,否则属性尚未初始化会导致 NPE
@@ -78,10 +77,6 @@ object HUD : Module("HUD", Category.RENDER, gameDetecting = false, defaultState 
     val chatAnimation by boolean("ChatAnimation", true)
     val chatAnimationSpeed by float("Chat-AnimationSpeed", 0.1f, 0.01f..1.0f) { chatAnimation }
     val chatRect by boolean("ChatRect", true) { chatAnimation }
-
-    val chatBlur by boolean("ChatBlur", false)
-    val chatBlurIterations by int("ChatBlur-Iterations", 3, 1..10) { chatBlur }
-    val chatBlurOffset by int("ChatBlur-Offset", 3, 1..20) { chatBlur }
 
     val customHealthBar by boolean("自定义血条", true)
     private val healthStyle by choices("血条样式", arrayOf("圆角", "渐变圆角", "闪烁", "极简", "主题", "iOS", "霓虹", "原版"), "圆角") { customHealthBar }
@@ -403,90 +398,6 @@ object HUD : Module("HUD", Category.RENDER, gameDetecting = false, defaultState 
             return@handler
 
         hud.render(false)
-    }
-
-    private var blurStencil: Framebuffer? = null
-
-    /**
-     * 处理任务队列模糊：将所有通过 ShaderElement.addBlurTask 注册的区域
-     * 绘制到 stencil framebuffer，再用 KawaseBlur 对主 framebuffer 进行模糊。
-     *
-     * 调用时机：在 MixinGuiNewChat.drawChat 和 MixinGuiChat.drawScreen 中，
-     * 于注册 blurArea 任务后、绘制前景内容（聊天文字/输入框）之前立即调用。
-     * 这样模糊只作用于背景，前景文字绘制在模糊之上，保持清晰。
-     *
-     * 注意：不能在 RenderTickEvent.Phase.END 调用，因为该事件在
-     * updateCameraAndRender 之后触发，此时聊天文字已绘制到 framebuffer，
-     * 模糊会覆盖文字导致聊天栏不可见。
-     */
-    fun drawBlur() {
-        if (!(state && chatBlur)) return
-        val tasks = ShaderElement.getTasks()
-        if (tasks.isEmpty()) return
-
-        blurStencil = ShaderElement.createFrameBuffer(blurStencil)
-        blurStencil!!.framebufferClear()
-        blurStencil!!.bindFramebuffer(false)
-
-        // 保存当前投影矩阵，设置正交投影以匹配缩放屏幕坐标系
-        GlStateManager.pushMatrix()
-        val sr = ScaledResolution(mc)
-        GlStateManager.matrixMode(GL11.GL_PROJECTION)
-        GlStateManager.pushMatrix()
-        GlStateManager.loadIdentity()
-        GlStateManager.ortho(0.0, sr.scaledWidth_double, sr.scaledHeight_double, 0.0, 1000.0, 3000.0)
-        GlStateManager.matrixMode(GL11.GL_MODELVIEW)
-        GlStateManager.loadIdentity()
-
-        for (runnable in tasks) {
-            runnable.run()
-        }
-        tasks.clear()
-
-        // 恢复投影矩阵
-        GlStateManager.matrixMode(GL11.GL_PROJECTION)
-        GlStateManager.popMatrix()
-        GlStateManager.matrixMode(GL11.GL_MODELVIEW)
-        GlStateManager.popMatrix()
-
-        blurStencil!!.unbindFramebuffer()
-        KawaseBlur.renderBlur(blurStencil!!.framebufferTexture, chatBlurIterations, chatBlurOffset)
-
-        // 恢复 GL 状态，避免 KawaseBlur 残留的 alpha test / blend 影响后续文字渲染
-        GlStateManager.disableBlend()
-        GlStateManager.disableAlpha()
-        GlStateManager.color(1f, 1f, 1f, 1f)
-    }
-
-    /**
-     * 基于 Scissor 的聊天栏模糊（替代 stencil 方式的 drawBlur）。
-     *
-     * 接收屏幕缩放坐标（左上角原点，与 GuiScreen / GuiNewChat 绘制坐标一致），
-     * 内部转换为 framebuffer 像素坐标（左下角原点）后调用 KawaseBlur.renderBlurScissor。
-     *
-     * 调用时机：在 MixinGuiNewChat.drawChat / MixinGuiChat.drawScreen 中，
-     * 绘制聊天文字 / 输入框文字之前调用，确保模糊只作用于背景，文字绘制在模糊之上。
-     *
-     * @param x  区域左上角 X（缩放坐标）
-     * @param y  区域左上角 Y（缩放坐标）
-     * @param x2 区域右下角 X（缩放坐标）
-     * @param y2 区域右下角 Y（缩放坐标）
-     */
-    @JvmOverloads
-    fun drawChatBlur(x: Int, y: Int, x2: Int, y2: Int) {
-        if (!(state && chatBlur)) return
-        if (x2 <= x || y2 <= y) return
-
-        val sr = ScaledResolution(mc)
-        val scaleFactor = sr.scaleFactor
-
-        // 转换为 framebuffer 像素坐标（原点左下角）
-        val px = x * scaleFactor
-        val py = mc.displayHeight - y2 * scaleFactor
-        val pw = (x2 - x) * scaleFactor
-        val ph = (y2 - y) * scaleFactor
-
-        KawaseBlur.renderBlurScissor(chatBlurIterations, chatBlurOffset, px, py, pw, ph)
     }
 
     val onUpdate = handler<UpdateEvent> {

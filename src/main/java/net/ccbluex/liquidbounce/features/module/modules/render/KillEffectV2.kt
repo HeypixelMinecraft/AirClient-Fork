@@ -26,11 +26,15 @@ object KillEffectV2 : Module("KillEffectV2", Category.RENDER) {
     private val blood by boolean("Blood", true)
 
     private var target: EntityLivingBase? = null
+    private var lastEffectTime = 0L
 
     val onUpdate = handler<UpdateEvent> {
         val t = target ?: return@handler
         if (!mc.theWorld.loadedEntityList.contains(t) || t.health <= 0) {
-            if (handleEvents()) {
+            val now = System.currentTimeMillis()
+            // 1s 冷却（不可开关），1s 内不会重复触发
+            if (handleEvents() && now - lastEffectTime >= 1000) {
+                lastEffectTime = now
                 if (lightning) {
                     val bolt = EntityLightningBolt(mc.theWorld, t.posX, t.posY, t.posZ)
                     mc.theWorld.addEntityToWorld((-Math.random() * 100000).toInt(), bolt)
@@ -77,6 +81,7 @@ object KillEffectV2 : Module("KillEffectV2", Category.RENDER) {
 
     override fun onDisable() {
         target = null
+        lastEffectTime = 0
     }
 
     private fun nextFloat(startInclusive: Float, endInclusive: Float): Float {

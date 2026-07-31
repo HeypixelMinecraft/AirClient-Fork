@@ -14,7 +14,6 @@ import net.ccbluex.liquidbounce.utils.render.RenderUtils
 import net.minecraft.util.Vec3
 import org.lwjgl.opengl.GL11.*
 import java.awt.Color
-import java.util.concurrent.CopyOnWriteArrayList
 
 object AttackEffect : Module("AttackEffect", Category.RENDER, spacedName = "Attack Effect") {
     private val amount by int("Amount", 8, 1..50)
@@ -34,9 +33,9 @@ object AttackEffect : Module("AttackEffect", Category.RENDER, spacedName = "Atta
     private val brightness by float("Brightness", 1F, 0F..1F)
     private val mixerSeconds by int("Seconds", 2, 1..10)
 
-    // 使用 CopyOnWriteArrayList 替代 LinkedList 避免并发修改异常
-    // 读多写少场景下性能良好，且遍历完全无锁
-    private val particles = CopyOnWriteArrayList<AttackParticle>()
+    // onUpdate/onRender3D 均在主线程触发，无需 CopyOnWriteArrayList
+    // 使用 ArrayList 避免 CopyOnWriteArrayList removeIf 的 O(n²) 复制开销
+    private val particles = ArrayList<AttackParticle>()
     private val timer = TimerUtils()
 
     private var lastHurtTime = 0
@@ -76,7 +75,7 @@ object AttackEffect : Module("AttackEffect", Category.RENDER, spacedName = "Atta
             i++
         }
 
-        // CopyOnWriteArrayList 的 removeIf 是线程安全的
+        // ArrayList.removeIf 内部使用迭代器，O(n) 复杂度
         particles.removeIf { particle ->
             particle.isDead() || mc.thePlayer.getDistanceSq(
                 particle.position.xCoord,

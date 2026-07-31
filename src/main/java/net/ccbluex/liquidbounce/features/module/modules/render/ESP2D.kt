@@ -151,6 +151,18 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
             val doArmorBar = armorBar
 
             val entities = collectedEntities.toList()
+
+            // Pass 1: setupCameraTransform 只调用一次，投影所有实体到屏幕空间
+            // 原实现每实体都调用 setupCameraTransform（昂贵），N 个实体 = N 次相机重建
+            try {
+                entityRenderer.setupCameraTransform(partialTicks, 0)
+            } catch (e: Exception) {
+                return@handler
+            }
+            updateMatrixCache()
+
+            val projected = ArrayList<Triple<Entity, Int, Vector4d>>(entities.size)
+
             for (i in entities.indices) {
                 val entity = entities.getOrNull(i) ?: continue
 
@@ -159,63 +171,58 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
                 val colorRGB = getColor(entity).rgb
 
                 val x = interpolate(entity.posX, entity.lastTickPosX, event.partialTicks.toDouble())
-                    val y = interpolate(entity.posY, entity.lastTickPosY, event.partialTicks.toDouble())
-                    val z = interpolate(entity.posZ, entity.lastTickPosZ, event.partialTicks.toDouble())
+                val y = interpolate(entity.posY, entity.lastTickPosY, event.partialTicks.toDouble())
+                val z = interpolate(entity.posZ, entity.lastTickPosZ, event.partialTicks.toDouble())
 
-                    val width = entity.width.toDouble() / 1.5
-                    val height = entity.height.toDouble() + if (entity.isSneaking) -0.3 else 0.2
-                    val aabb = AxisAlignedBB(
-                        x - width, y, z - width,
-                        x + width, y + height, z + width
-                    )
-                    val corners = listOf(
-                        Vector3d(aabb.minX, aabb.minY, aabb.minZ),
-                        Vector3d(aabb.minX, aabb.maxY, aabb.minZ),
-                        Vector3d(aabb.maxX, aabb.minY, aabb.minZ),
-                        Vector3d(aabb.maxX, aabb.maxY, aabb.minZ),
-                        Vector3d(aabb.minX, aabb.minY, aabb.maxZ),
-                        Vector3d(aabb.minX, aabb.maxY, aabb.maxZ),
-                        Vector3d(aabb.maxX, aabb.minY, aabb.maxZ),
-                        Vector3d(aabb.maxX, aabb.maxY, aabb.maxZ)
-                    )
+                val width = entity.width.toDouble() / 1.5
+                val height = entity.height.toDouble() + if (entity.isSneaking) -0.3 else 0.2
+                val aabb = AxisAlignedBB(
+                    x - width, y, z - width,
+                    x + width, y + height, z + width
+                )
 
-                    try {
-                        entityRenderer.setupCameraTransform(partialTicks, 0)
-                    } catch (e: Exception) {
-                        continue
-                    }
+                var bbScreen: Vector4d? = null
 
-                    // setupCameraTransform 后立即缓存 matrices，避免每个顶点都调用 glGet*
-                    updateMatrixCache()
+                // 投影 8 个角点（用并行数组避免每实体分配 8 个 Vector3d 对象）
+                val cMinX = aabb.minX; val cMaxX = aabb.maxX
+                val cMinY = aabb.minY; val cMaxY = aabb.maxY
+                val cMinZ = aabb.minZ; val cMaxZ = aabb.maxZ
+                val cX = doubleArrayOf(cMinX, cMinX, cMaxX, cMaxX, cMinX, cMinX, cMaxX, cMaxX)
+                val cY = doubleArrayOf(cMinY, cMaxY, cMinY, cMaxY, cMinY, cMaxY, cMinY, cMaxY)
+                val cZ = doubleArrayOf(cMinZ, cMinZ, cMinZ, cMinZ, cMaxZ, cMaxZ, cMaxZ, cMaxZ)
 
-                    var bbScreen: Vector4d? = null
+                for (j in 0 until 8) {
+                    val vec = project2D(
+                        scaleFactor,
+                        cX[j] - renderMng.viewerPosX,
+                        cY[j] - renderMng.viewerPosY,
+                        cZ[j] - renderMng.viewerPosZ
+                    ) ?: continue
 
-                    for (corner in corners) {
-                        val vec = project2D(
-                            scaleFactor,
-                            corner.x - renderMng.viewerPosX,
-                            corner.y - renderMng.viewerPosY,
-                            corner.z - renderMng.viewerPosZ
-                        ) ?: continue
-
-                        if (vec.z in 0.0..1.0) {
-                            if (bbScreen == null) {
-                                bbScreen = Vector4d(vec.x, vec.y, vec.z, 0.0)
-                            }
-                            bbScreen.x = min(vec.x, bbScreen.x)
-                            bbScreen.y = min(vec.y, bbScreen.y)
-                            bbScreen.z = max(vec.x, bbScreen.z)
-                            bbScreen.w = max(vec.y, bbScreen.w)
+                    if (vec.z in 0.0..1.0) {
+                        if (bbScreen == null) {
+                            bbScreen = Vector4d(vec.x, vec.y, vec.z, 0.0)
                         }
+                        bbScreen.x = min(vec.x, bbScreen.x)
+                        bbScreen.y = min(vec.y, bbScreen.y)
+                        bbScreen.z = max(vec.x, bbScreen.z)
+                        bbScreen.w = max(vec.y, bbScreen.w)
                     }
+                }
 
-                    bbScreen?.let { pos ->
-                        try {
-                            entityRenderer.setupOverlayRendering()
-                        } catch (e: Exception) {
-                            return@let
-                        }
+                if (bbScreen != null) {
+                    projected.add(Triple(entity, colorRGB, bbScreen))
+                }
+            }
 
+            // Pass 2: setupOverlayRendering 只调用一次，绘制所有投影后的实体
+            try {
+                entityRenderer.setupOverlayRendering()
+            } catch (e: Exception) {
+                return@handler
+            }
+
+            for ((entity, colorRGB, pos) in projected) {
                         val minX = pos.x
                         val minY = pos.y
                         val maxX = pos.z
@@ -223,7 +230,7 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
 
                         if (minX.isNaN() || minY.isNaN() || maxX.isNaN() || maxY.isNaN() ||
                             minX == maxX || minY == maxY) {
-                            return@let
+                            continue
                         }
 
                         if (doOutline) {
@@ -260,7 +267,7 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
                             if (hp > maxHp) hp = maxHp
 
                             if (maxHp <= 0 || hp.isNaN() || maxHp.isNaN()) {
-                                return@let
+                                continue
                             }
 
                             val ratio = hp / maxHp
@@ -446,7 +453,6 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
                                 -1
                             )
                         }
-                    }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -508,9 +514,10 @@ object ESP2D : Module("ESP2D", Category.RENDER) {
     private fun collectEntities() {
         try {
             collectedEntities.clear()
-            val worldEntities = mc.theWorld?.loadedEntityList?.toList() ?: return
+            // 直接遍历 loadedEntityList, 避免每帧 .toList() 复制整个实体列表造成 GC 压力
+            val worldEntities = mc.theWorld?.loadedEntityList ?: return
 
-            worldEntities.forEach { e ->
+            for (e in worldEntities) {
                 if (e != null && !e.isDead && (EntityUtils.isSelected(e, false)
                             || (localPlayer && e is EntityPlayerSP && mc.gameSettings.thirdPersonView != 0)
                             || (droppedItems && e is EntityItem))

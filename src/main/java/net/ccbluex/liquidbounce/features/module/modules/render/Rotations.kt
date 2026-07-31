@@ -24,12 +24,22 @@ object Rotations : Module("Rotations", Category.RENDER, gameDetecting = false) {
     private val smoothRotations by boolean("SmoothRotations", false)
     private val smoothingFactor by float("SmoothFactor", 0.15f, 0.1f..0.9f) { smoothRotations }
 
+    private val customRotation by boolean("CustomRotation", false)
+    private val customYaw by float("CustomYaw", 0f, -180f..180f) { customRotation }
+    private val customPitch by float("CustomPitch", 0f, -90f..90f) { customRotation }
+    private val yawSpeed by float("YawSpeed", 0f, 0f..180f) { customRotation }
+    private val pitchSpeed by float("PitchSpeed", 0f, 0f..90f) { customRotation }
+
     val debugRotations by boolean("DebugRotations", false)
 
     var prevHeadPitch = 0f
     var headPitch = 0f
 
     private var lastRotation: Rotation? = null
+
+    // Auto-rotation accumulators
+    private var autoYaw = 0f
+    private var autoPitch = 0f
 
     private val specialCases
         get() = arrayListOf(Derp.handleEvents(), FreeCam.shouldDisableRotations()).any { it }
@@ -39,7 +49,17 @@ object Rotations : Module("Rotations", Category.RENDER, gameDetecting = false) {
             return@handler
 
         val thePlayer = mc.thePlayer ?: return@handler
-        val targetRotation = getRotation() ?: serverRotation
+        var targetRotation = getRotation() ?: serverRotation
+
+        // Custom rotation: override rendering rotation only (no packets affected)
+        if (customRotation) {
+            autoYaw = (autoYaw + yawSpeed) % 360f
+            autoPitch = (autoPitch + pitchSpeed).let { p ->
+                val wrapped = p % 180f
+                if (wrapped > 90f) wrapped - 180f else if (wrapped < -90f) wrapped + 180f else wrapped
+            }
+            targetRotation = Rotation(customYaw + autoYaw, (customPitch + autoPitch).coerceIn(-90f, 90f))
+        }
 
         prevHeadPitch = headPitch
         headPitch = targetRotation.pitch
@@ -57,7 +77,7 @@ object Rotations : Module("Rotations", Category.RENDER, gameDetecting = false) {
         return old + (new - old) * tickDelta
     }
 
-    fun shouldRotate() = state && (specialCases || currentRotation != null)
+    fun shouldRotate() = state && (specialCases || currentRotation != null || customRotation)
 
     private fun smoothRotation(from: Rotation, to: Rotation): Rotation {
         val diffYaw = to.yaw - from.yaw

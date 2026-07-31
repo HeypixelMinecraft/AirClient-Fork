@@ -40,7 +40,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val swordMode by choices(
         "SwordMode",
-        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "postplace", "Matrix", "PredictionSemi", "Prediction", "GrimAC"),
+        arrayOf("None", "NCP", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Blink", "postplace", "Matrix", "PredictionSemi", "Prediction", "GrimAC", "Vision"),
         "None"
     )
 
@@ -56,7 +56,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val consumeMode by choices(
         "ConsumeMode",
-        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Intave", "OldIntave", "GrimAC", "Drop"),
+        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "Intave", "OldIntave", "GrimAC", "Drop", "Vision"),
         "None"
     )
 
@@ -73,7 +73,7 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
     private val bowPacket by choices(
         "BowMode",
-        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "GrimAC"),
+        arrayOf("None", "UpdatedNCP", "AAC5", "SwitchItem", "InvalidC08", "GrimAC", "Vision"),
         "None"
     )
 
@@ -333,6 +333,20 @@ object NoSlow : Module("NoSlow", Category.MOVEMENT, gameDetecting = false) {
 
         if (event.isCancelled || shouldSwap)
             return@handler
+
+        // Vision mode - cancel item use packets (visual only, no server-side effects)
+        val visionHeldItem = player.heldItem?.item
+        val isVisionActive = (visionHeldItem is ItemSword && swordMode == "Vision" && usingItemFunc()) ||
+            (visionHeldItem != null && isConsumable(visionHeldItem) && consumeMode == "Vision" && player.isUsingItem) ||
+            (visionHeldItem is ItemBow && bowPacket == "Vision" && player.isUsingItem)
+
+        if (isVisionActive) {
+            if ((packet is C08PacketPlayerBlockPlacement && packet.placedBlockDirection == 255) ||
+                (packet is C07PacketPlayerDigging && packet.status == RELEASE_USE_ITEM)) {
+                event.cancelEvent()
+                return@handler
+            }
+        }
 
         if (consumeMode == "GrimAC") {
             handleGrimConsumePacket(event, packet, player)

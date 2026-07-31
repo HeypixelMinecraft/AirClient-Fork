@@ -209,6 +209,7 @@ class Target : Element("Target"), Listenable {
     private val followTarget by boolean("FollowTarget", false)
 
     private val decimalFormat = DecimalFormat("0.0", DecimalFormatSymbols(Locale.ENGLISH))
+    private val decimalFormat2 = DecimalFormat("0.00", DecimalFormatSymbols(Locale.ENGLISH))
     private var target: EntityLivingBase? = null
     private var lastTarget: EntityLivingBase? = null
     private var hue = 0.0f
@@ -1355,8 +1356,8 @@ class Target : Element("Target"), Listenable {
             GlowUtils.drawGlow(x + 34.5f, y + 4f, x + 34.5f + Fonts.fontRegular35.getStringWidth(entity.name), y + 4f + Fonts.fontRegular35.FONT_HEIGHT, (textGlowStrength * 10F).toInt(), textGlowColor)
         }
         Fonts.fontRegular35.drawString(entity.name, x + 34.5f, y + 4f, Color.WHITE.rgb)
-        Fonts.fontRegular35.drawString("Health: ${"%.1f".format(stylesEasingHealth)}", x + 34.5f, y + 14f, Color.WHITE.rgb)
-        Fonts.fontRegular35.drawString("Distance: ${"%.1f".format(mc.thePlayer.getDistanceToEntity(entity))}m", x + 34.5f, y + 24f, Color.WHITE.rgb)
+        Fonts.fontRegular35.drawString("Health: ${decimalFormat.format(stylesEasingHealth)}", x + 34.5f, y + 14f, Color.WHITE.rgb)
+        Fonts.fontRegular35.drawString("Distance: ${decimalFormat.format(mc.thePlayer.getDistanceToEntity(entity))}m", x + 34.5f, y + 24f, Color.WHITE.rgb)
 
         RenderUtils.drawRect(x + 2.5f, y + 35.5f, x + width + 11.5f, y + 37.5f, Color(0, 0, 0, 200).rgb)
         RenderUtils.drawRect(x + 3f, y + 36f, x + 3f + (stylesEasingHealth / entity.maxHealth) * (width + 8.5f), y + 37f, Color(0,255,150))
@@ -1740,8 +1741,8 @@ class Target : Element("Target"), Listenable {
             GlowUtils.drawGlow(40f, 10f, 40f + Fonts.fontRegular35.getStringWidth(entity.name), 10f + Fonts.fontRegular35.FONT_HEIGHT, (textGlowStrength * 10F).toInt(), textGlowColor)
         }
         Fonts.fontRegular35.drawString(entity.name, 40f, 10f, Color.WHITE.rgb)
-        Fonts.fontRegular35.drawString("Health: ${"%.2f".format(NavenEasingHealth)}", 40f, 22f, Color.WHITE.rgb)
-        Fonts.fontRegular35.drawString("Distance: ${"%.2f".format(entity.getDistanceToEntity(mc.thePlayer))}", 40f, 30f, Color.WHITE.rgb)
+        Fonts.fontRegular35.drawString("Health: ${decimalFormat2.format(NavenEasingHealth)}", 40f, 22f, Color.WHITE.rgb)
+        Fonts.fontRegular35.drawString("Distance: ${decimalFormat2.format(entity.getDistanceToEntity(mc.thePlayer))}", 40f, 30f, Color.WHITE.rgb)
 
         GlStateManager.popMatrix()
         return Border(x, y, x + width, y + height)
@@ -1986,7 +1987,7 @@ class Target : Element("Target"), Listenable {
         val name = entity.name
         val health = entity.health
         val tWidth = (45F + chillFont.getStringWidth(name)
-            .coerceAtLeast(chillFont.getStringWidth("%.1f".format(health)))).coerceAtLeast(120F)
+            .coerceAtLeast(chillFont.getStringWidth(decimalFormat.format(health)))).coerceAtLeast(120F)
         val playerInfo = mc.netHandler.getPlayerInfo(entity.uniqueID)
 
         GlStateManager.pushMatrix()
@@ -2065,7 +2066,7 @@ class Target : Element("Target"), Listenable {
     private fun renderAstolfoHUD(x: Float, y: Float): Border {
         val entity = target ?: lastTarget ?: return Border(0f, 0f, 0f, 0f)
         val font = Fonts.minecraftFont
-        val healthString = "%.1f ".format(entity.health)
+        val healthString = "${decimalFormat.format(entity.health)} "
 
         if (entity != astolfoLastTarget || easingHealth < 0 || easingHealth > entity.maxHealth ||
             abs(easingHealth - entity.health) < 0.01
@@ -2155,7 +2156,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = if (showAvatar) x + avatarSize + 3 else x + 3
         drawFontString(entity.name, textX, y + 1, Color.WHITE.rgb)
-        val healthText = String.format("%.1f", entity.health)
+        val healthText = decimalFormat.format(entity.health)
         drawFontString(healthText, textX, y + 11, healthBarColor.rgb)
         drawFontString("\u2764", textX + getFontWidth(healthText) + 2, y + 11, healthBarColor.rgb)
 
@@ -2175,7 +2176,7 @@ class Target : Element("Target"), Listenable {
         drawFontString(winLoss, x + totalWidth - getFontWidth(winLoss) - 1, y + 1, wlColor.rgb)
 
         val diff = playerHealth - entity.health
-        val diffText = if (diff > 0) "+${"%.1f".format(diff)}" else String.format("%.1f", diff)
+        val diffText = if (diff > 0) "+${decimalFormat.format(diff)}" else decimalFormat.format(diff)
         val diffColor = when {
             diff > 0 -> Color(0, 255, 0)
             diff < 0 -> Color(255, 0, 0)
@@ -2445,7 +2446,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 6F, Color.WHITE.rgb)
-        Fonts.font35.drawString("Health: ${String.format("%.1f", health)}", textX, 20F, Color(200, 200, 200).rgb)
+        Fonts.font35.drawString("Health: ${decimalFormat.format(health)}", textX, 20F, Color(200, 200, 200).rgb)
 
         val barWidth = tWidth - 8F
         RenderUtils.drawRoundedRect(4F, 34F, tWidth - 4F, 42F, Color(40, 40, 40).rgb, 4F)
@@ -2514,7 +2515,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 8F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} / ${String.format("%.1f", maxHealth)}", textX, 22F, Color(180, 180, 180).rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} / ${decimalFormat.format(maxHealth)}", textX, 22F, Color(180, 180, 180).rgb)
 
         val barWidth = tWidth - 8F
         val barHeight = 6F
@@ -2631,7 +2632,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 8F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} HP", textX, 22F, Color(180, 180, 180).rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} HP", textX, 22F, Color(180, 180, 180).rgb)
 
         GlStateManager.popMatrix()
         return Border(x, y, x + tWidth, y + 45F)
@@ -2798,7 +2799,7 @@ class Target : Element("Target"), Listenable {
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX + glitchOffset, 8F, Color(0, 255, 255).rgb)
         
-        val healthText = "HP: ${String.format("%.1f", health)}/${String.format("%.1f", maxHealth)}"
+        val healthText = "HP: ${decimalFormat.format(health)}/${decimalFormat.format(maxHealth)}"
         Fonts.font35.drawString(healthText, textX, 22F, Color(0, 200, 200).rgb)
 
         val barWidth = tWidth - 8F
@@ -2896,7 +2897,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 8F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} / ${String.format("%.1f", maxHealth)}", textX, 22F, Color(200, 200, 200).rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} / ${decimalFormat.format(maxHealth)}", textX, 22F, Color(200, 200, 200).rgb)
 
         val barWidth = tWidth - 8F
         val barY = 36F
@@ -3003,7 +3004,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 8F, Color(0, 255, 0).rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} / ${String.format("%.1f", maxHealth)}", textX, 22F, Color(0, 200, 0).rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} / ${decimalFormat.format(maxHealth)}", textX, 22F, Color(0, 200, 0).rgb)
 
         val barWidth = tWidth - 8F
         val barY = 36F
@@ -3188,7 +3189,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 8F, Color.WHITE.rgb)
-        Fonts.font35.drawString("HP: ${String.format("%.0f", health)}/${String.format("%.0f", maxHealth)}", textX, 22F, Color(180, 180, 180).rgb)
+        Fonts.font35.drawString("HP: ${health.toInt()}/${maxHealth.toInt()}", textX, 22F, Color(180, 180, 180).rgb)
 
         val barWidth = tWidth - 8F
         val barY = 36F
@@ -3324,7 +3325,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX, 8F, neonColor.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} HP", textX, 22F, Color(200, 200, 200).rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} HP", textX, 22F, Color(200, 200, 200).rgb)
 
         val barWidth = tWidth - 8F
         val barY = 36F
@@ -3461,7 +3462,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 10F
         Fonts.font40.drawString(name, textX + glitchOffsetX, 8F + glitchOffsetY, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} HP", textX, 22F, healthColor.rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} HP", textX, 22F, healthColor.rgb)
 
         val barWidth = tWidth - 8F
         val barY = 36F
@@ -3525,7 +3526,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 15F
         Fonts.font40.drawString(name, textX, 8F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} HP", textX, 22F, healthColor.rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} HP", textX, 22F, healthColor.rgb)
 
         val barWidth = tWidth - 10F
         val barY = 36F
@@ -3620,7 +3621,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 18F
         Fonts.font40.drawString(name, textX, 9F, Color(200, 230, 255).rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} / ${String.format("%.1f", maxHealth)}", textX, 24F, healthColor.rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} / ${decimalFormat.format(maxHealth)}", textX, 24F, healthColor.rgb)
 
         val barWidth = tWidth - 12F
         val barY = 41F
@@ -3714,7 +3715,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 12F
         Fonts.font40.drawString(name, textX, 7F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} HP", textX, 21F, healthColor.rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} HP", textX, 21F, healthColor.rgb)
 
         val barWidth = tWidth - 10F
         val barY = 36F
@@ -3800,7 +3801,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 12F
         Fonts.font40.drawString(name, textX, 7F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} HP", textX, 21F, healthColor.rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} HP", textX, 21F, healthColor.rgb)
 
         val barWidth = tWidth - 10F
         val barY = 36F
@@ -3865,7 +3866,7 @@ class Target : Element("Target"), Listenable {
 
         val textX = avatarSize + 20F
         Fonts.font40.drawString(name, textX, 10F, Color.WHITE.rgb)
-        Fonts.font35.drawString("${String.format("%.1f", health)} / ${String.format("%.1f", maxHealth)}", textX, 25F, healthColor.rgb)
+        Fonts.font35.drawString("${decimalFormat.format(health)} / ${decimalFormat.format(maxHealth)}", textX, 25F, healthColor.rgb)
 
         val barWidth = tWidth - 16F
         val barY = 41F

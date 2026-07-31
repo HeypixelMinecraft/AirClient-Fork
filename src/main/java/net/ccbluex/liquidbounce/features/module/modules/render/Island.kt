@@ -68,15 +68,30 @@ import kotlin.math.sin
 import kotlin.math.abs
 object Island : Module("Island", Category.RENDER) {
     private val ClientName by text("ClientName", "Air")
-    val style by choices("Style", arrayOf("ios", "legacy", "bar"), "legacy")
+    val style by choices("Style", arrayOf("ios", "legacy", "bar", "minimal", "elegant", "fresh", "card"), "legacy")
     private val animTension by float("BounceTension", 0.01f, 0.01f..1.0f)
     private val animFriction by float("BounceFriction", 0.12f, 0.01f..1.0f)
+    // 每个样式的圆角设置
+    private val iosRadius by float("iOS-Radius", 15F, 0F..50F) { style == "ios" }
+    private val legacyRadius by float("Legacy-Radius", 14F, 0F..50F) { style == "legacy" }
+    private val barRadius by float("Bar-Radius", 6F, 0F..50F) { style == "bar" }
+    private val minimalRadius by float("Minimal-Radius", 13F, 0F..50F) { style == "minimal" }
+    private val elegantRadius by float("Elegant-Radius", 14F, 0F..50F) { style == "elegant" }
+    private val freshRadius by float("Fresh-Radius", 17F, 0F..50F) { style == "fresh" }
+    private val cardRadius by float("Card-Radius", 12F, 0F..50F) { style == "card" }
+
+    // 每个样式的展开动画设置
     private val legacyExpandAnim by choices("Legacy-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "Bounce") { style == "legacy" }
+    private val iosExpandAnim by choices("iOS-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "Bounce") { style == "ios" }
+    private val barExpandAnim by choices("Bar-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "Bounce") { style == "bar" }
+    private val minimalExpandAnim by choices("Minimal-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "EaseOut") { style == "minimal" }
+    private val elegantExpandAnim by choices("Elegant-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "EaseOut") { style == "elegant" }
+    private val freshExpandAnim by choices("Fresh-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "EaseOut") { style == "fresh" }
+    private val cardExpandAnim by choices("Card-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "EaseOut") { style == "card" }
 
     // iOS样式设置
     private val iosShadowStrength by float("iOS-ShadowStrength", 10F, 0F..30F) { style == "ios" }
     private val iosBlurStrength by float("iOS-BlurStrength", 15F, 0F..50F) { style == "ios" }
-    private val iosExpandAnim by choices("iOS-ExpandAnim", arrayOf("Bounce", "EaseOut", "Linear", "Back"), "Bounce") { style == "ios" }
 
     private val logoIcon by choices("LogoIcon", arrayOf("Default", "A", "Diamond", "Radioactive", "Start", "Start2", "Earth"), "A")
     private val pingIcon by choices("PingIcon", arrayOf("Default", "Ping2", "Ping3", "Ping4", "Ping5"), "Ping3") { style == "legacy" }
@@ -159,6 +174,13 @@ object Island : Module("Island", Category.RENDER) {
     private var animatedGappleProgress = 0F
     private var lastGappleProgressUpdateTime: Long = 0L
 
+    // 反射缓存：避免每帧重新查找 Method/Field，减少渲染热路径开销
+    private var gappleProgressMethod: java.lang.reflect.Method? = null
+    private var gappleIsEatingField: java.lang.reflect.Field? = null
+    private var gappleTicksField: java.lang.reflect.Field? = null
+    private var gappleCField: java.lang.reflect.Field? = null
+    private var gappleReflectInited = false
+
     private var AnimGlobalX = 0F
     private var AnimGlobalY = 0F
     private var AnimGlobalWidth = 100F
@@ -217,12 +239,20 @@ object Island : Module("Island", Category.RENDER) {
     private var displayedBPS: Double = 0.0
     private var ProgressBarAnimationWidth = 0F
 
-    private val prevModuleStates = HashMap<Module, Boolean>()
+    private var prevModuleStates = HashMap<Module, Boolean>()
     private val notifications = CopyOnWriteArrayList<ToggleNotification>()
     private var scaledScreen = ScaledResolution(mc)
     private var width = scaledScreen.scaledWidth
     private var height = scaledScreen.scaledHeight
     private var start_y = (height / 20).toFloat()
+
+    // 缓存常用模块引用，避免每帧调用 ModuleManager.getModule(name) 的 O(n) 线性扫描
+    // 模块在客户端启动时注册，使用 lazy 安全
+    private val scaffoldModuleRef by lazy { ModuleManager.getModule("Scaffold") }
+    private val scaffold2ModuleRef by lazy { ModuleManager.getModule("Scaffold2") }
+    private val gappleModuleRef by lazy { ModuleManager.getModule("Gapple") }
+    private val fuckerModuleRef by lazy { ModuleManager.getModule("Fucker") }
+    private val nukerModuleRef by lazy { ModuleManager.getModule("Nuker") }
 
     private var headerFooterCacheTime = 0L
     private var cachedHeader: List<String>? = null
@@ -313,25 +343,27 @@ object Island : Module("Island", Category.RENDER) {
 
     private fun applyExpandAnim(current: Float, start: Float, target: Float, elapsed: Float): Float {
         val t = (elapsed / ANIM_DURATION.toFloat()).coerceIn(0f, 1f)
-        val eased = when {
-            style == "ios" -> when (iosExpandAnim) {
-                "EaseOut" -> easeOutCubic(t)
-                "Linear" -> linear(t)
-                "Back" -> backOut(t)
-                else -> return current
-            }
-            else -> when (legacyExpandAnim) {
-                "EaseOut" -> easeOutCubic(t)
-                "Linear" -> linear(t)
-                "Back" -> backOut(t)
-                else -> return current
-            }
+        val anim = getCurrentExpandAnim()
+        val eased = when (anim) {
+            "EaseOut" -> easeOutCubic(t)
+            "Linear" -> linear(t)
+            "Back" -> backOut(t)
+            else -> return current
         }
         return start + (target - start) * eased
     }
 
     private fun getCurrentExpandAnim(): String {
-        return if (style == "ios") iosExpandAnim else legacyExpandAnim
+        return when (style) {
+            "ios" -> iosExpandAnim
+            "legacy" -> legacyExpandAnim
+            "bar" -> barExpandAnim
+            "minimal" -> minimalExpandAnim
+            "elegant" -> elegantExpandAnim
+            "fresh" -> freshExpandAnim
+            "card" -> cardExpandAnim
+            else -> legacyExpandAnim
+        }
     }
 
     private fun getTabListHeaderFooter(): Pair<IChatComponent?, IChatComponent?> {
@@ -355,8 +387,8 @@ object Island : Module("Island", Category.RENDER) {
 
     private fun shouldShowBreakProgress(): Boolean {
         if (!breakProgressOnlyFuckerNuker) return true
-        val fucker = ModuleManager.getModule("Fucker") ?: return false
-        val nuker = ModuleManager.getModule("Nuker") ?: return false
+        val fucker = fuckerModuleRef ?: return false
+        val nuker = nukerModuleRef ?: return false
         return fucker.state || nuker.state
     }
 
@@ -387,7 +419,7 @@ object Island : Module("Island", Category.RENDER) {
             breakProgressTarget = 0F
         }
 
-        val gappleModule = ModuleManager.getModule("Gapple")
+        val gappleModule = gappleModuleRef
         if (gappleModule != null && gappleModule.state) {
             val currentProgress = getGappleEatingProgress()
             if (System.currentTimeMillis() - lastGappleProgressUpdateTime >= 50) {
@@ -421,33 +453,41 @@ object Island : Module("Island", Category.RENDER) {
     }
 
     private fun getGappleEatingProgress(): Float {
-        val gappleModule = ModuleManager.getModule("Gapple") ?: return 0f
+        val gappleModule = gappleModuleRef ?: return 0f
         if (!gappleModule.state) return 0f
-        
-        return try {
-            val getProgressMethod = gappleModule::class.java.getDeclaredMethod("getEatingProgress")
-            getProgressMethod.isAccessible = true
-            (getProgressMethod.invoke(gappleModule) as? Float) ?: 0f
-        } catch (e: Exception) {
+
+        // 初始化反射缓存（仅执行一次），避免每帧 getDeclaredMethod/getDeclaredField
+        if (!gappleReflectInited) {
+            gappleReflectInited = true
             try {
-                val isEatingField = gappleModule::class.java.getDeclaredField("isEating")
-                isEatingField.isAccessible = true
-                val isEating = isEatingField.getBoolean(gappleModule)
-                
-                if (!isEating) return 0f
-                
-                val ticksField = gappleModule::class.java.getDeclaredField("ticks")
-                ticksField.isAccessible = true
-                val ticks = ticksField.getInt(gappleModule)
-                
-                val cField = gappleModule::class.java.getDeclaredField("c")
-                cField.isAccessible = true
-                val c = cField.get(gappleModule) as Int
-                
-                (ticks.toFloat() / c.toFloat()).coerceIn(0f, 1f)
-            } catch (e3: Exception) {
-                0f
+                gappleProgressMethod = gappleModule::class.java.getDeclaredMethod("getEatingProgress")
+                gappleProgressMethod?.isAccessible = true
+            } catch (_: Exception) {
+                try {
+                    gappleIsEatingField = gappleModule::class.java.getDeclaredField("isEating")
+                    gappleIsEatingField?.isAccessible = true
+                    gappleTicksField = gappleModule::class.java.getDeclaredField("ticks")
+                    gappleTicksField?.isAccessible = true
+                    gappleCField = gappleModule::class.java.getDeclaredField("c")
+                    gappleCField?.isAccessible = true
+                } catch (_: Exception) {}
             }
+        }
+
+        return try {
+            // 优先使用缓存的方法
+            gappleProgressMethod?.let {
+                (it.invoke(gappleModule) as? Float) ?: 0f
+            } ?: run {
+                // 回退到字段方式
+                val isEating = gappleIsEatingField?.getBoolean(gappleModule) ?: return 0f
+                if (!isEating) return 0f
+                val ticks = gappleTicksField?.getInt(gappleModule) ?: return 0f
+                val c = gappleCField?.get(gappleModule) as? Int ?: return 0f
+                (ticks.toFloat() / c.toFloat()).coerceIn(0f, 1f)
+            }
+        } catch (_: Exception) {
+            0f
         }
     }
 
@@ -469,8 +509,8 @@ object Island : Module("Island", Category.RENDER) {
         height = scaledScreen.scaledHeight
         start_y = (height / 20).toFloat()
 
-        val scaffoldModule = ModuleManager.getModule("Scaffold")
-        val scaffoldModule2 = ModuleManager.getModule("Scaffold2")
+        val scaffoldModule = scaffoldModuleRef
+        val scaffoldModule2 = scaffold2ModuleRef
 
         val isChestOpen = mc.currentScreen is GuiChest && ChestTheme
         val chestSlots = if (isChestOpen) {
@@ -604,7 +644,7 @@ object Island : Module("Island", Category.RENDER) {
                 else -> { targetWidth = 190F; targetHeight = 58F }
             }
             targetX = (width - targetWidth) / 2
-        } else if (style == "legacy" && showGappleProgress && animatedGappleProgress > 0.01f && ModuleManager.getModule("Gapple")?.state == true) {
+        } else if (style == "legacy" && showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true) {
             renderMode = "GAPPLE_PROGRESS"
             targetWidth = 190F
             targetHeight = 58F
@@ -625,7 +665,7 @@ object Island : Module("Island", Category.RENDER) {
         } else {
             when (style) {
                 "ios" -> {
-                    val scaffoldOn = isScaffold && (ModuleManager.getModule("Scaffold")?.state == true || ModuleManager.getModule("Scaffold2")?.state == true)
+                    val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
 
@@ -682,7 +722,7 @@ object Island : Module("Island", Category.RENDER) {
                     targetX = (width - targetWidth) / 2
                 }
                 "bar" -> {
-                    val scaffoldOn = isScaffold && (ModuleManager.getModule("Scaffold")?.state == true || ModuleManager.getModule("Scaffold2")?.state == true)
+                    val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
 
@@ -726,6 +766,122 @@ object Island : Module("Island", Category.RENDER) {
                             renderMode = "BAR_WATERMARK"
                             targetWidth = calcBarWatermarkWidth()
                             targetHeight = 34f
+                            targetX = (width - targetWidth) / 2
+                        }
+                    }
+                }
+                "minimal" -> {
+                    val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
+                    val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
+                    val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    when {
+                        scaffoldOn -> {
+                            renderMode = "MINIMAL_SCAFFOLD"
+                            targetWidth = 200f; targetHeight = 28f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        toggleActive -> {
+                            renderMode = "MINIMAL_TOGGLE"
+                            targetWidth = calcMinimalToggleWidth()
+                            targetHeight = (notifications.size * 26f)
+                            targetX = (width - targetWidth) / 2
+                        }
+                        musicOn -> {
+                            renderMode = "MINIMAL_MUSIC"
+                            targetWidth = 240f; targetHeight = 38f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        else -> {
+                            renderMode = "MINIMAL_WATERMARK"
+                            targetWidth = calcMinimalWatermarkWidth()
+                            targetHeight = 26f
+                            targetX = (width - targetWidth) / 2
+                        }
+                    }
+                }
+                "elegant" -> {
+                    val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
+                    val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
+                    val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    when {
+                        scaffoldOn -> {
+                            renderMode = "ELEGANT_SCAFFOLD"
+                            targetWidth = 230f; targetHeight = 70f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        toggleActive -> {
+                            renderMode = "ELEGANT_TOGGLE"
+                            targetWidth = calcElegantToggleWidth()
+                            targetHeight = (notifications.size * 36f)
+                            targetX = (width - targetWidth) / 2
+                        }
+                        musicOn -> {
+                            renderMode = "ELEGANT_MUSIC"
+                            targetWidth = 300f; targetHeight = 64f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        else -> {
+                            renderMode = "ELEGANT_WATERMARK"
+                            targetWidth = calcElegantWatermarkWidth()
+                            targetHeight = 40f
+                            targetX = (width - targetWidth) / 2
+                        }
+                    }
+                }
+                "fresh" -> {
+                    val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
+                    val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
+                    val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    when {
+                        scaffoldOn -> {
+                            renderMode = "FRESH_SCAFFOLD"
+                            targetWidth = 260f; targetHeight = 40f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        toggleActive -> {
+                            renderMode = "FRESH_TOGGLE"
+                            targetWidth = calcFreshToggleWidth()
+                            targetHeight = (notifications.size * 34f)
+                            targetX = (width - targetWidth) / 2
+                        }
+                        musicOn -> {
+                            renderMode = "FRESH_MUSIC"
+                            targetWidth = 270f; targetHeight = 56f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        else -> {
+                            renderMode = "FRESH_WATERMARK"
+                            targetWidth = calcFreshWatermarkWidth()
+                            targetHeight = 34f
+                            targetX = (width - targetWidth) / 2
+                        }
+                    }
+                }
+                "card" -> {
+                    val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
+                    val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
+                    val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    when {
+                        scaffoldOn -> {
+                            renderMode = "CARD_SCAFFOLD"
+                            targetWidth = 240f; targetHeight = 62f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        toggleActive -> {
+                            renderMode = "CARD_TOGGLE"
+                            targetWidth = calcCardToggleWidth()
+                            targetHeight = (notifications.size * 46f)
+                            targetX = (width - targetWidth) / 2
+                        }
+                        musicOn -> {
+                            renderMode = "CARD_MUSIC"
+                            targetWidth = 280f; targetHeight = 70f
+                            targetX = (width - targetWidth) / 2
+                        }
+                        else -> {
+                            renderMode = "CARD_WATERMARK"
+                            targetWidth = calcCardWatermarkWidth()
+                            targetHeight = 46f
                             targetX = (width - targetWidth) / 2
                         }
                     }
@@ -780,13 +936,20 @@ object Island : Module("Island", Category.RENDER) {
 
             val isIosMode = renderMode.startsWith("IOS_")
             val isBarMode = renderMode.startsWith("BAR_")
-            val currentRadius = if (isIosMode) {
-                if (renderMode == "IOS_CHEST") 14f else if (AnimGlobalHeight > 100f) 20f else AnimGlobalHeight / 2f
-            } else if (isBarMode) {
-                if (renderMode == "BAR_CHEST") 6f else 6f
-            } else if (AnimGlobalHeight > 30F) {
-                if (renderMode == "CHEST" || renderMode == "TABLIST") ChestRounded else 8F
-            } else AnimGlobalHeight / 2F
+            val isMinimalMode = renderMode.startsWith("MINIMAL_")
+            val isElegantMode = renderMode.startsWith("ELEGANT_")
+            val isFreshMode = renderMode.startsWith("FRESH_")
+            val isCardMode = renderMode.startsWith("CARD_")
+            val currentRadius = when {
+                isIosMode -> if (renderMode == "IOS_CHEST") iosRadius else if (AnimGlobalHeight > 100f) iosRadius.coerceAtMost(AnimGlobalHeight / 2f) else iosRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                isBarMode -> barRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                isMinimalMode -> minimalRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                isElegantMode -> elegantRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                isFreshMode -> freshRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                isCardMode -> cardRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                AnimGlobalHeight > 30F -> if (renderMode == "CHEST" || renderMode == "TABLIST") ChestRounded else legacyRadius.coerceAtMost(AnimGlobalHeight / 2f)
+                else -> legacyRadius.coerceAtMost(AnimGlobalHeight / 2f)
+            }
 
             val drawX = AnimGlobalX
             val drawY = AnimGlobalY
@@ -888,6 +1051,22 @@ object Island : Module("Island", Category.RENDER) {
                 "BAR_SCAFFOLD" -> renderBarScaffold(drawX, drawY, drawW, drawH)
                 "BAR_MUSIC" -> renderBarMusic(drawX, drawY, drawW, drawH)
                 "BAR_CHEST" -> renderBarChest(drawX, drawY, drawW, drawH, chestSlots)
+                "MINIMAL_WATERMARK" -> renderMinimalWatermark(drawX, drawY, drawW, drawH)
+                "MINIMAL_TOGGLE" -> renderMinimalToggle(drawX, drawY, drawW, drawH)
+                "MINIMAL_SCAFFOLD" -> renderMinimalScaffold(drawX, drawY, drawW, drawH)
+                "MINIMAL_MUSIC" -> renderMinimalMusic(drawX, drawY, drawW, drawH)
+                "ELEGANT_WATERMARK" -> renderElegantWatermark(drawX, drawY, drawW, drawH)
+                "ELEGANT_TOGGLE" -> renderElegantToggle(drawX, drawY, drawW, drawH)
+                "ELEGANT_SCAFFOLD" -> renderElegantScaffold(drawX, drawY, drawW, drawH)
+                "ELEGANT_MUSIC" -> renderElegantMusic(drawX, drawY, drawW, drawH)
+                "FRESH_WATERMARK" -> renderFreshWatermark(drawX, drawY, drawW, drawH)
+                "FRESH_TOGGLE" -> renderFreshToggle(drawX, drawY, drawW, drawH)
+                "FRESH_SCAFFOLD" -> renderFreshScaffold(drawX, drawY, drawW, drawH)
+                "FRESH_MUSIC" -> renderFreshMusic(drawX, drawY, drawW, drawH)
+                "CARD_WATERMARK" -> renderCardWatermark(drawX, drawY, drawW, drawH)
+                "CARD_TOGGLE" -> renderCardToggle(drawX, drawY, drawW, drawH)
+                "CARD_SCAFFOLD" -> renderCardScaffold(drawX, drawY, drawW, drawH)
+                "CARD_MUSIC" -> renderCardMusic(drawX, drawY, drawW, drawH)
             }
         }
 
@@ -2985,6 +3164,737 @@ object Island : Module("Island", Category.RENDER) {
             truncated = truncated.dropLast(1)
         }
         return if (truncated.isNotEmpty()) "$truncated\u2026" else ""
+    }
+
+    // ============================================================
+    // MINIMAL style - 极简风格: pure text, no icons, ultra-clean thin pill.
+    //   WATERMARK: ● AirClient · Username
+    //   TOGGLE:    ● ModuleName — ON/OFF   (stacked, multiple)
+    //   SCAFFOLD:  count/max   thin progress line
+    //   MUSIC:     ♪ SongName   thin progress line
+    // ============================================================
+
+    private fun calcMinimalWatermarkWidth(): Float {
+        val username = mc.session.username
+        val pad = 16f
+        val dot = 4f
+        val gap = 8f
+        val nameW = Fonts.fontSemibold35.getStringWidth(ClientName).toFloat()
+        val sepW = Fonts.fontRegular35.getStringWidth("  \u2022  ").toFloat()
+        val userW = Fonts.fontRegular35.getStringWidth(username).toFloat()
+        return (pad + dot + gap + nameW + sepW + userW + pad).coerceAtLeast(180f)
+    }
+
+    private fun calcMinimalToggleWidth(): Float {
+        if (notifications.isEmpty()) return 200f
+        var maxWidth = 0f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val nameW = Fonts.fontSemibold35.getStringWidth(entry.moduleName).toFloat()
+            val stateStr = if (entry.enabled) "ON" else "OFF"
+            val stateW = Fonts.fontRegular35.getStringWidth("  \u2014  $stateStr").toFloat()
+            val totalW = 16f + 4f + 8f + nameW + stateW + 16f
+            maxWidth = max(maxWidth, totalW)
+        }
+        return maxWidth.coerceAtLeast(200f)
+    }
+
+    private fun renderMinimalWatermark(x: Float, y: Float, w: Float, h: Float) {
+        val username = mc.session.username
+        val themeColor = ClientThemesUtils.getColor()
+        val pad = 16f
+        val cy = y + h / 2f
+        val textBaseY = cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f
+
+        // Calculate total content width to center
+        val dot = 4f
+        val gap = 8f
+        val nameW = Fonts.fontSemibold35.getStringWidth(ClientName).toFloat()
+        val sepW = Fonts.fontRegular35.getStringWidth("  \u2022  ").toFloat()
+        val userW = Fonts.fontRegular35.getStringWidth(username).toFloat()
+        val totalW = dot + gap + nameW + sepW + userW
+
+        var cx = x + (w - totalW) / 2f
+
+        // Tiny theme-colored dot
+        drawRoundedRect(cx, cy - dot / 2, cx + dot, cy + dot / 2, themeColor.rgb, dot / 2)
+        cx += dot + gap
+
+        // Client name
+        Fonts.fontSemibold35.drawString(ClientName, cx, textBaseY, Color.WHITE.rgb)
+        cx += nameW
+
+        // Separator
+        Fonts.fontRegular35.drawString("  \u2022  ", cx, textBaseY, Color(120, 120, 120).rgb)
+        cx += sepW
+
+        // Username
+        Fonts.fontRegular35.drawString(username, cx, textBaseY, Color(220, 220, 220).rgb)
+    }
+
+    private fun renderMinimalToggle(x: Float, y: Float, w: Float, h: Float) {
+        var currentY = 0f
+        val rowH = 26f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val rowY = y + currentY
+            val elapsed = System.currentTimeMillis() - notify.createTime
+            val remaining = notify.duration - elapsed
+            val fadeAlpha = if (remaining < 300) (remaining.toFloat() / 300f).coerceIn(0f, 1f) else 1f
+            val cy = rowY + rowH / 2f
+            val textBaseY = cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f
+
+            val dot = 4f
+            val gap = 8f
+            val nameW = Fonts.fontSemibold35.getStringWidth(entry.moduleName).toFloat()
+            val stateStr = if (entry.enabled) "ON" else "OFF"
+            val sepStateW = Fonts.fontRegular35.getStringWidth("  \u2014  $stateStr").toFloat()
+            val totalW = dot + gap + nameW + sepStateW
+
+            var cx = x + (w - totalW) / 2f
+
+            // Tiny dot
+            val dotColor = if (entry.enabled) Color(127, 217, 130, (255 * fadeAlpha).toInt())
+                           else Color(230, 130, 110, (255 * fadeAlpha).toInt())
+            drawRoundedRect(cx, cy - dot / 2, cx + dot, cy + dot / 2, dotColor.rgb, dot / 2)
+            cx += dot + gap
+
+            // Module name
+            Fonts.fontSemibold35.drawString(entry.moduleName, cx, textBaseY,
+                Color(255, 255, 255, (255 * fadeAlpha).toInt()).rgb)
+            cx += nameW
+
+            // Separator + state
+            Fonts.fontRegular35.drawString("  \u2014  ", cx, textBaseY, Color(120, 120, 120, (255 * fadeAlpha).toInt()).rgb)
+            cx += Fonts.fontRegular35.getStringWidth("  \u2014  ").toFloat()
+            val stateColor = if (entry.enabled) Color(127, 217, 130, (255 * fadeAlpha).toInt())
+                             else Color(230, 130, 110, (255 * fadeAlpha).toInt())
+            Fonts.fontRegular35.drawString(stateStr, cx, textBaseY, stateColor.rgb)
+
+            currentY += rowH
+        }
+    }
+
+    private fun renderMinimalScaffold(x: Float, y: Float, w: Float, h: Float) {
+        val blockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (blockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val pad = 14f
+        val themeColor = ClientThemesUtils.getColor()
+        val cy = y + (h - 5f) / 2f
+
+        // Centered count text
+        val countStr = "$blockCount / $maxBlocks"
+        val countW = Fonts.fontSemibold35.getStringWidth(countStr).toFloat()
+        Fonts.fontSemibold35.drawString(countStr, x + (w - countW) / 2f, cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f, Color.WHITE.rgb)
+
+        // Thin progress line at bottom
+        val barY = y + h - 4f
+        drawRoundedRect(x + pad, barY, x + w - pad, barY + 2f, Color(255, 255, 255, 30).rgb, 1f)
+        if (percentage > 0.001f) {
+            drawRoundedRect(x + pad, barY, x + pad + (w - pad * 2) * percentage, barY + 2f, themeColor.rgb, 1f)
+        }
+    }
+
+    private fun renderMinimalMusic(x: Float, y: Float, w: Float, h: Float) {
+        val musicName = MusicPlayer.currentMusicName
+        val lyric = MusicPlayer.currentLyricDisplay
+        val progress = MusicPlayer.progress.coerceIn(0f, 1f)
+        val pad = 14f
+        val themeColor = ClientThemesUtils.getColor()
+        val maxTextW = w - pad * 2
+
+        // Song name centered at top
+        val nameDisplay = if (musicName != "None" && musicName != "无") musicName else lyric.take(24)
+        val text = "\u266A $nameDisplay"
+        val drawn = truncateText(text, Fonts.fontSemibold35, maxTextW)
+        val textW = Fonts.fontSemibold35.getStringWidth(drawn).toFloat()
+        val nameY = y + 4f
+        Fonts.fontSemibold35.drawString(drawn, x + (w - textW) / 2f, nameY, Color.WHITE.rgb)
+
+        // Lyric below the song name
+        if (lyric.isNotEmpty()) {
+            val lyricDisplay = truncateText(lyric.take(30), Fonts.fontRegular30, maxTextW)
+            val lyricW = Fonts.fontRegular30.getStringWidth(lyricDisplay).toFloat()
+            val lyricY = nameY + Fonts.fontSemibold35.FONT_HEIGHT + 1f
+            Fonts.fontRegular30.drawString(lyricDisplay, x + (w - lyricW) / 2f, lyricY, Color(200, 200, 200, 180).rgb)
+        }
+
+        // Thin progress line at bottom
+        val barY = y + h - 4f
+        drawRoundedRect(x + pad, barY, x + w - pad, barY + 2f, Color(255, 255, 255, 30).rgb, 1f)
+        if (progress > 0.001f) {
+            drawRoundedRect(x + pad, barY, x + pad + (w - pad * 2) * progress, barY + 2f, themeColor.rgb, 1f)
+        }
+    }
+
+    // ============================================================
+    // ELEGANT style - 高雅风格: two-column with vertical divider, lavender.
+    //   WATERMARK: [icon square] AirClient | Username · 60fps
+    //   TOGGLE:    ModuleName | ON/OFF   (stacked, multiple)
+    //   SCAFFOLD:  circular progress ring + count + BPS
+    //   MUSIC:     [album] SongName \n lyric | progress
+    // ============================================================
+
+    private fun calcElegantWatermarkWidth(): Float {
+        val username = mc.session.username
+        val fpsStr = "${Minecraft.getDebugFPS()}fps"
+        val pad = 16f
+        val iconSz = 26f
+        val dividerGap = 20f
+        val nameW = Fonts.fontSemibold40.getStringWidth(ClientName).toFloat()
+        val userW = Fonts.fontRegular35.getStringWidth("$username \u2022 $fpsStr").toFloat()
+        return (pad + iconSz + 10f + nameW + dividerGap + 2f + dividerGap + userW + pad).coerceAtLeast(280f)
+    }
+
+    private fun calcElegantToggleWidth(): Float {
+        if (notifications.isEmpty()) return 240f
+        var maxWidth = 0f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val nameW = Fonts.fontSemibold35.getStringWidth(entry.moduleName).toFloat()
+            val stateStr = if (entry.enabled) "ENABLED" else "DISABLED"
+            val stateW = Fonts.fontRegular35.getStringWidth(stateStr).toFloat()
+            val totalW = 20f + nameW + 24f + 2f + 24f + stateW + 20f
+            maxWidth = max(maxWidth, totalW)
+        }
+        return maxWidth.coerceAtLeast(240f)
+    }
+
+    private fun renderElegantWatermark(x: Float, y: Float, w: Float, h: Float) {
+        // Lavender tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        val username = mc.session.username
+        val fpsStr = "${Minecraft.getDebugFPS()}fps"
+        val pad = 16f
+        val cy = y + h / 2f
+        var cx = x + pad
+
+        // Icon in square frame (lavender border)
+        val iconSz = 26f
+        drawRoundedRect(cx, cy - iconSz / 2, cx + iconSz, cy + iconSz / 2, Color(200, 184, 224, 60).rgb, 6f)
+        RenderUtils.drawRoundedBorderRect(cx, cy - iconSz / 2, cx + iconSz, cy + iconSz / 2, 1f, 0, Color(200, 184, 224, 150).rgb, 6f)
+        val imgSz = 16
+        drawImage(getLogoResource(), (cx + (iconSz - imgSz) / 2).toInt(), (cy - imgSz / 2).toInt(), imgSz, imgSz, Color(220, 210, 240))
+        cx += iconSz + 10f
+
+        // Left text: AirClient
+        val textBaseY = cy - Fonts.fontSemibold40.FONT_HEIGHT / 2f + 1f
+        Fonts.fontSemibold40.drawString(ClientName, cx, textBaseY, Color(220, 210, 240).rgb)
+        cx += Fonts.fontSemibold40.getStringWidth(ClientName).toFloat()
+
+        // Vertical divider
+        val divX = x + w / 2f
+        drawRoundedRect(divX - 1f, y + 10f, divX + 1f, y + h - 10f, Color(128, 136, 144, 120).rgb, 1f)
+
+        // Right text: Username · 60fps
+        val rightText = "$username \u2022 $fpsStr"
+        val rightW = Fonts.fontRegular35.getStringWidth(rightText).toFloat()
+        Fonts.fontRegular35.drawString(rightText, divX + 24f, textBaseY + 2f, Color(245, 245, 250).rgb)
+    }
+
+    private fun renderElegantToggle(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        var currentY = 0f
+        val rowH = 36f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val rowY = y + currentY
+            val elapsed = System.currentTimeMillis() - notify.createTime
+            val remaining = notify.duration - elapsed
+            val fadeAlpha = if (remaining < 300) (remaining.toFloat() / 300f).coerceIn(0f, 1f) else 1f
+            val cy = rowY + rowH / 2f
+            val textBaseY = cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f
+
+            // Left: module name
+            val nameW = Fonts.fontSemibold35.getStringWidth(entry.moduleName).toFloat()
+            Fonts.fontSemibold35.drawString(entry.moduleName, x + 20f, textBaseY,
+                Color(220, 210, 240, (255 * fadeAlpha).toInt()).rgb)
+
+            // Vertical divider
+            val divX = x + w / 2f
+            drawRoundedRect(divX - 1f, rowY + 8f, divX + 1f, rowY + rowH - 8f, Color(128, 136, 144, (120 * fadeAlpha).toInt()).rgb, 1f)
+
+            // Right: state
+            val stateStr = if (entry.enabled) "ENABLED" else "DISABLED"
+            val stateColor = if (entry.enabled) Color(180, 220, 200, (255 * fadeAlpha).toInt())
+                             else Color(230, 180, 200, (255 * fadeAlpha).toInt())
+            Fonts.fontRegular35.drawString(stateStr, divX + 24f, textBaseY + 1f, stateColor.rgb)
+
+            currentY += rowH
+        }
+    }
+
+    private fun renderElegantScaffold(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        val blockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (blockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val cx = x + w / 2f
+        val cy = y + h / 2f - 4f
+
+        // Circular progress ring (background)
+        val ringR = 22f
+        GlStateManager.pushMatrix()
+        GlStateManager.enableBlend()
+        GlStateManager.disableTexture2D()
+        GlStateManager.tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO)
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+        glLineWidth(4f)
+        // Background ring
+        glColor4f(0.5f, 0.5f, 0.55f, 0.4f)
+        glBegin(GL_LINE_LOOP)
+        for (i in 0..360 step 6) {
+            val theta = i * Math.PI / 180
+            glVertex2d(cx + ringR * cos(theta), cy + ringR * sin(theta))
+        }
+        glEnd()
+        // Progress arc
+        val arcEnd = (percentage * 360).toInt()
+        if (arcEnd > 0) {
+            glColor4f(0.78f, 0.72f, 0.88f, 1f)
+            glBegin(GL_LINE_STRIP)
+            for (i in 0..arcEnd step 6) {
+                val theta = (i - 90) * Math.PI / 180
+                glVertex2d(cx + ringR * cos(theta), cy + ringR * sin(theta))
+            }
+            glEnd()
+        }
+        glLineWidth(1f)
+        glDisable(GL_LINE_SMOOTH)
+        GlStateManager.enableTexture2D()
+        GlStateManager.disableBlend()
+        GlStateManager.popMatrix()
+
+        // Count in center
+        val countStr = "$blockCount"
+        val countW = Fonts.fontSemibold40.getStringWidth(countStr).toFloat()
+        Fonts.fontSemibold40.drawString(countStr, cx - countW / 2f, cy - Fonts.fontSemibold40.FONT_HEIGHT / 2f + 1f, Color(220, 210, 240).rgb)
+
+        // BPS below
+        val bpsStr = String.format("%.1f", displayedBPS) + " BPS"
+        val bpsW = Fonts.fontRegular35.getStringWidth(bpsStr).toFloat()
+        Fonts.fontRegular35.drawString(bpsStr, cx - bpsW / 2f, y + h - 16f, Color(180, 170, 200).rgb)
+    }
+
+    private fun renderElegantMusic(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        val musicName = MusicPlayer.currentMusicName
+        val lyric = MusicPlayer.currentLyricDisplay
+        val displayText = if (musicName != "None" && musicName != "无") musicName else lyric.take(20)
+        val progress = MusicPlayer.progress.coerceIn(0f, 1f)
+        val pad = 14f
+        var cx = x + pad
+
+        // Album square (left column)
+        val albumSz = 40f
+        val albumY = y + (h - albumSz) / 2f
+        drawRoundedRect(cx, albumY, cx + albumSz, albumY + albumSz, Color(200, 184, 224, 80).rgb, 8f)
+        RenderUtils.drawRoundedBorderRect(cx, albumY, cx + albumSz, albumY + albumSz, 1f, 0, Color(200, 184, 224, 150).rgb, 8f)
+        val mIconSz = 22
+        drawImage(ResourceLocation("airclient/watermark_images/music.png"),
+            (cx + (albumSz - mIconSz) / 2).toInt(), (albumY + (albumSz - mIconSz) / 2).toInt(), mIconSz, mIconSz, Color(220, 210, 240))
+        cx += albumSz + 14f
+
+        // Vertical divider
+        val divX = cx
+        drawRoundedRect(divX - 1f, y + 10f, divX + 1f, y + h - 10f, Color(128, 136, 144, 100).rgb, 1f)
+        cx += 14f
+
+        // Right column: song name + lyric
+        val maxTextW = x + w - pad - cx
+        val displayName = truncateText(displayText, Fonts.fontSemibold35, maxTextW)
+        Fonts.fontSemibold35.drawString(displayName, cx, albumY + 2f, Color(220, 210, 240).rgb)
+
+        if (lyric.isNotEmpty()) {
+            val lyricDisplay = truncateText(lyric.take(30), Fonts.fontRegular30, maxTextW)
+            Fonts.fontRegular30.drawString(lyricDisplay, cx, albumY + 2f + Fonts.fontSemibold35.FONT_HEIGHT + 2f, Color(200, 190, 220, 200).rgb)
+        }
+
+        // Progress bar at bottom of right column
+        val barH = 3f
+        val barY = y + h - barH - 10f
+        val barW = maxTextW
+        drawRoundedRect(cx, barY, cx + barW, barY + barH, Color(200, 184, 224, 60).rgb, barH / 2)
+        if (progress > 0.001f) {
+            drawRoundedRect(cx, barY, cx + barW * progress, barY + barH, Color(200, 184, 224).rgb, barH / 2)
+        }
+    }
+
+    // ============================================================
+    // FRESH style - 清新风格: composite main pill + attached right segment,
+    //   mint green accents.
+    //   WATERMARK: [icon] AirClient · Username  +  [attached fps segment]
+    //   TOGGLE:    [fresh tag] ModuleName  [state segment]   (stacked, multiple)
+    //   SCAFFOLD:  [block icon] count  [segmented fresh bar]
+    //   MUSIC:     [album] SongName \n lyric  [wave progress]
+    // ============================================================
+
+    private fun calcFreshWatermarkWidth(): Float {
+        val username = mc.session.username
+        val fpsStr = "${Minecraft.getDebugFPS()}fps"
+        val pad = 14f
+        val iconSz = 22f
+        val gap = 8f
+        val nameW = Fonts.fontSemibold40.getStringWidth(ClientName).toFloat()
+        val sepW = Fonts.fontRegular35.getStringWidth("  \u2022  ").toFloat()
+        val userW = Fonts.fontRegular35.getStringWidth(username).toFloat()
+        val fpsW = Fonts.fontSemibold35.getStringWidth(fpsStr).toFloat() + 24f
+        return (pad + iconSz + gap + nameW + sepW + userW + gap + 4f + fpsW + pad).coerceAtLeast(260f)
+    }
+
+    private fun calcFreshToggleWidth(): Float {
+        if (notifications.isEmpty()) return 240f
+        var maxWidth = 0f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val nameW = Fonts.fontSemibold35.getStringWidth(entry.moduleName).toFloat()
+            val stateStr = if (entry.enabled) "ON" else "OFF"
+            val stateW = Fonts.fontRegular35.getStringWidth(stateStr).toFloat() + 24f
+            val totalW = 14f + 6f + 10f + nameW + 16f + 4f + stateW + 14f
+            maxWidth = max(maxWidth, totalW)
+        }
+        return maxWidth.coerceAtLeast(240f)
+    }
+
+    private fun renderFreshWatermark(x: Float, y: Float, w: Float, h: Float) {
+        // Mint tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, h / 2f)
+        val username = mc.session.username
+        val fpsStr = "${Minecraft.getDebugFPS()}fps"
+        val pad = 14f
+        val cy = y + h / 2f
+        var cx = x + pad
+
+        // Icon
+        val iconSz = 18
+        drawImage(getLogoResource(), cx.toInt(), (cy - iconSz / 2).toInt(), iconSz, iconSz, Color(127, 229, 197))
+        cx += iconSz + 8f
+
+        // Client name
+        val textBaseY = cy - Fonts.fontSemibold40.FONT_HEIGHT / 2f + 1f
+        Fonts.fontSemibold40.drawString(ClientName, cx, textBaseY, Color.WHITE.rgb)
+        cx += Fonts.fontSemibold40.getStringWidth(ClientName).toFloat()
+
+        // Separator
+        Fonts.fontRegular35.drawString("  \u2022  ", cx, textBaseY + 2f, Color(127, 229, 197).rgb)
+        cx += Fonts.fontRegular35.getStringWidth("  \u2022  ").toFloat()
+
+        // Username
+        Fonts.fontRegular35.drawString(username, cx, textBaseY + 2f, Color(220, 240, 235).rgb)
+        cx += Fonts.fontRegular35.getStringWidth(username).toFloat() + 8f
+
+        // Attached fps segment (separate rounded rect that looks connected)
+        val fpsPillW = Fonts.fontSemibold35.getStringWidth(fpsStr).toFloat() + 24f
+        val fpsX = x + w - pad - fpsPillW
+        drawRoundedRect(fpsX, y + 4f, fpsX + fpsPillW, y + h - 4f, Color(127, 229, 197, 180).rgb, (h - 8f) / 2f)
+        Fonts.fontSemibold35.drawString(fpsStr, fpsX + 12f, textBaseY + 1f, Color(20, 60, 50).rgb)
+    }
+
+    private fun renderFreshToggle(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, 16f)
+        var currentY = 0f
+        val rowH = 34f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val rowY = y + currentY
+            val elapsed = System.currentTimeMillis() - notify.createTime
+            val remaining = notify.duration - elapsed
+            val fadeAlpha = if (remaining < 300) (remaining.toFloat() / 300f).coerceIn(0f, 1f) else 1f
+            val cy = rowY + rowH / 2f
+            var cx = x + 14f
+
+            // Fresh colored tag (vertical bar)
+            val tagColor = if (entry.enabled) Color(127, 229, 197, (255 * fadeAlpha).toInt())
+                           else Color(230, 130, 110, (255 * fadeAlpha).toInt())
+            drawRoundedRect(cx, rowY + 6f, cx + 6f, rowY + rowH - 6f, tagColor.rgb, 3f)
+            cx += 6f + 10f
+
+            // Module name
+            val textBaseY = cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f
+            Fonts.fontSemibold35.drawString(entry.moduleName, cx, textBaseY,
+                Color(255, 255, 255, (255 * fadeAlpha).toInt()).rgb)
+
+            // Attached state segment on right
+            val stateStr = if (entry.enabled) "ON" else "OFF"
+            val stateW = Fonts.fontRegular35.getStringWidth(stateStr).toFloat() + 24f
+            val stateX = x + w - 14f - stateW
+            drawRoundedRect(stateX, rowY + 4f, stateX + stateW, rowY + rowH - 4f, tagColor.rgb, (rowH - 8f) / 2f)
+            Fonts.fontRegular35.drawString(stateStr, stateX + 12f, textBaseY + 1f,
+                Color(20, 60, 50, (255 * fadeAlpha).toInt()).rgb)
+
+            currentY += rowH
+        }
+    }
+
+    private fun renderFreshScaffold(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, h / 2f)
+        val blockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (blockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val pad = 14f
+        val cy = y + h / 2f
+        var cx = x + pad
+
+        // Block icon
+        val iconSz = 18
+        drawImage(getLogoResource(), cx.toInt(), (cy - iconSz / 2).toInt(), iconSz, iconSz, Color(127, 229, 197))
+        cx += iconSz + 8f
+
+        // Count
+        val countStr = "$blockCount / $maxBlocks"
+        Fonts.fontSemibold35.drawString(countStr, cx, cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f, Color.WHITE.rgb)
+        cx += Fonts.fontSemibold35.getStringWidth(countStr).toFloat() + 12f
+
+        // BPS
+        val bpsStr = String.format("%.1f", displayedBPS) + " BPS"
+        Fonts.fontRegular35.drawString(bpsStr, cx, cy - Fonts.fontRegular35.FONT_HEIGHT / 2f + 1f, Color(127, 229, 197).rgb)
+
+        // Segmented fresh bar on the right
+        val barAreaX = x + w / 2f + 10f
+        val barAreaW = x + w - pad - barAreaX
+        val segCount = 12
+        val gap = 2f
+        val segW = ((barAreaW - gap * (segCount - 1)) / segCount).coerceAtLeast(3f)
+        val barH = 10f
+        val barY = cy - barH / 2f
+        val filledSegs = (percentage * segCount).toInt().coerceIn(0, segCount)
+        for (i in 0 until segCount) {
+            val sx = barAreaX + i * (segW + gap)
+            val col = if (i < filledSegs) Color(127, 229, 197, 230) else Color(60, 80, 75, 180)
+            drawRoundedRect(sx, barY, sx + segW, barY + barH, col.rgb, 2f)
+        }
+    }
+
+    private fun renderFreshMusic(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, h / 2f)
+        val musicName = MusicPlayer.currentMusicName
+        val lyric = MusicPlayer.currentLyricDisplay
+        val displayText = if (musicName != "None" && musicName != "无") musicName else lyric.take(20)
+        val progress = MusicPlayer.progress.coerceIn(0f, 1f)
+        val pad = 12f
+        var cx = x + pad
+
+        // Album square
+        val albumSz = 38f
+        val albumY = y + (h - albumSz) / 2f
+        drawRoundedRect(cx, albumY, cx + albumSz, albumY + albumSz, Color(127, 229, 197, 80).rgb, 8f)
+        val mIconSz = 22
+        drawImage(ResourceLocation("airclient/watermark_images/music.png"),
+            (cx + (albumSz - mIconSz) / 2).toInt(), (albumY + (albumSz - mIconSz) / 2).toInt(), mIconSz, mIconSz, Color(220, 250, 240))
+        cx += albumSz + 10f
+
+        // Song name
+        val maxTextW = x + w - pad - cx
+        val displayName = truncateText(displayText, Fonts.fontSemibold35, maxTextW)
+        Fonts.fontSemibold35.drawString(displayName, cx, albumY + 2f, Color.WHITE.rgb)
+
+        // Lyric
+        if (lyric.isNotEmpty()) {
+            val lyricDisplay = truncateText(lyric.take(28), Fonts.fontRegular30, maxTextW)
+            Fonts.fontRegular30.drawString(lyricDisplay, cx, albumY + 2f + Fonts.fontSemibold35.FONT_HEIGHT + 2f, Color(180, 230, 215, 200).rgb)
+        }
+
+        // Wave-like progress bar (sine modulated)
+        val barH = 4f
+        val barY = y + h - barH - 8f
+        val barX = cx
+        val barW = x + w - pad - barX
+        drawRoundedRect(barX, barY, barX + barW, barY + barH, Color(127, 229, 197, 50).rgb, barH / 2)
+        if (progress > 0.001f) {
+            drawRoundedRect(barX, barY, barX + barW * progress, barY + barH, Color(127, 229, 197).rgb, barH / 2)
+        }
+    }
+
+    // ============================================================
+    // CARD style - 卡片风格: two-line stacked card with large icon.
+    //   WATERMARK: [large icon] \n AirClient \n Username · 60fps · ip
+    //   TOGGLE:    [icon] \n ModuleName \n state   (stacked, multiple)
+    //   SCAFFOLD:  [block icon] \n count/max + BPS \n progress bar
+    //   MUSIC:     [album] \n SongName \n lyric \n progress
+    // ============================================================
+
+    private fun calcCardWatermarkWidth(): Float {
+        val username = mc.session.username
+        val fpsStr = "${Minecraft.getDebugFPS()}fps"
+        val ipStr = if (customip) ip else ServerUtils.remoteIp ?: "SinglePlayer"
+        val pad = 14f
+        val iconSz = 30f
+        val gap = 12f
+        val nameW = Fonts.fontSemibold40.getStringWidth(ClientName).toFloat()
+        val subW = Fonts.fontRegular35.getStringWidth("$username \u2022 $fpsStr \u2022 $ipStr").toFloat()
+        return (pad + iconSz + gap + max(nameW, subW) + pad).coerceAtLeast(260f)
+    }
+
+    private fun calcCardToggleWidth(): Float {
+        if (notifications.isEmpty()) return 240f
+        var maxWidth = 0f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val nameW = Fonts.fontSemibold35.getStringWidth(entry.moduleName).toFloat()
+            val stateStr = if (entry.enabled) "ENABLED" else "DISABLED"
+            val stateW = Fonts.fontRegular35.getStringWidth(stateStr).toFloat()
+            val totalW = 14f + 26f + 10f + max(nameW, stateW) + 14f
+            maxWidth = max(maxWidth, totalW)
+        }
+        return maxWidth.coerceAtLeast(240f)
+    }
+
+    private fun renderCardWatermark(x: Float, y: Float, w: Float, h: Float) {
+        // Blue-gray tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        val username = mc.session.username
+        val fpsStr = "${Minecraft.getDebugFPS()}fps"
+        val ipStr = if (customip) ip else ServerUtils.remoteIp ?: "SinglePlayer"
+        val pad = 14f
+        val iconSz = 30f
+        val iconX = x + pad
+        val iconY = y + (h - iconSz) / 2f
+
+        // Large icon in colored square
+        drawRoundedRect(iconX, iconY, iconX + iconSz, iconY + iconSz, Color(107, 123, 140, 100).rgb, 8f)
+        val imgSz = 20
+        drawImage(getLogoResource(), (iconX + (iconSz - imgSz) / 2).toInt(), (iconY + (iconSz - imgSz) / 2).toInt(), imgSz, imgSz, Color(180, 200, 220))
+
+        // Two-line text on the right
+        val textX = iconX + iconSz + 12f
+        val centerY = y + h / 2f
+        val line1Y = centerY - Fonts.fontSemibold40.FONT_HEIGHT / 2f - 2f
+        val line2Y = line1Y + Fonts.fontSemibold40.FONT_HEIGHT + 2f
+
+        // Line 1: AirClient
+        Fonts.fontSemibold40.drawString(ClientName, textX, line1Y, Color(220, 230, 245).rgb)
+
+        // Line 2: Username · 60fps · ip
+        val subText = "$username \u2022 $fpsStr \u2022 $ipStr"
+        Fonts.fontRegular35.drawString(subText, textX, line2Y, Color(160, 180, 200).rgb)
+    }
+
+    private fun renderCardToggle(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        var currentY = 0f
+        val rowH = 46f
+        for (notify in notifications) {
+            val entry = notify as? ToggleNotification ?: continue
+            val rowY = y + currentY
+            val elapsed = System.currentTimeMillis() - notify.createTime
+            val remaining = notify.duration - elapsed
+            val fadeAlpha = if (remaining < 300) (remaining.toFloat() / 300f).coerceIn(0f, 1f) else 1f
+
+            val iconSz = 28f
+            val iconX = x + 14f
+            val iconY = rowY + (rowH - iconSz) / 2f
+
+            // Status icon square
+            val iconColor = if (entry.enabled) Color(127, 217, 130, (180 * fadeAlpha).toInt())
+                            else Color(230, 130, 110, (180 * fadeAlpha).toInt())
+            drawRoundedRect(iconX, iconY, iconX + iconSz, iconY + iconSz, iconColor.rgb, 6f)
+            val imgSz = 16
+            drawImage(getLogoResource(), (iconX + (iconSz - imgSz) / 2).toInt(), (iconY + (iconSz - imgSz) / 2).toInt(), imgSz, imgSz,
+                Color(255, 255, 255, (255 * fadeAlpha).toInt()))
+
+            // Two-line text
+            val textX = iconX + iconSz + 10f
+            val centerY = rowY + rowH / 2f
+            val line1Y = centerY - Fonts.fontSemibold35.FONT_HEIGHT / 2f - 2f
+            val line2Y = line1Y + Fonts.fontSemibold35.FONT_HEIGHT + 2f
+
+            Fonts.fontSemibold35.drawString(entry.moduleName, textX, line1Y,
+                Color(220, 230, 245, (255 * fadeAlpha).toInt()).rgb)
+
+            val stateStr = if (entry.enabled) "ENABLED" else "DISABLED"
+            Fonts.fontRegular35.drawString(stateStr, textX, line2Y,
+                if (entry.enabled) Color(127, 217, 130, (255 * fadeAlpha).toInt()).rgb
+                else Color(230, 130, 110, (255 * fadeAlpha).toInt()).rgb)
+
+            currentY += rowH
+        }
+    }
+
+    private fun renderCardScaffold(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        val blockCount = (0..8).sumOf { slotIndex ->
+            val stack = mc.thePlayer.inventory.getStackInSlot(slotIndex)
+            if (stack != null && stack.item is ItemBlock) stack.stackSize else 0
+        }
+        val percentage = (blockCount.toFloat() / maxBlocks.toFloat()).coerceIn(0f, 1f)
+        val pad = 14f
+        val iconSz = 30f
+        val iconX = x + pad
+        val iconY = y + (h - iconSz) / 2f - 4f
+
+        // Block icon square
+        drawRoundedRect(iconX, iconY, iconX + iconSz, iconY + iconSz, Color(107, 123, 140, 100).rgb, 8f)
+        val imgSz = 20
+        drawImage(getLogoResource(), (iconX + (iconSz - imgSz) / 2).toInt(), (iconY + (iconSz - imgSz) / 2).toInt(), imgSz, imgSz, Color(180, 200, 220))
+
+        // Two-line text
+        val textX = iconX + iconSz + 12f
+        val line1Y = y + 10f
+        val line2Y = line1Y + Fonts.fontSemibold40.FONT_HEIGHT + 2f
+
+        Fonts.fontSemibold40.drawString("$blockCount / $maxBlocks", textX, line1Y, Color(220, 230, 245).rgb)
+        val bpsStr = String.format("%.1f", displayedBPS) + " BPS"
+        Fonts.fontRegular35.drawString(bpsStr, textX, line2Y, Color(160, 180, 200).rgb)
+
+        // Progress bar at bottom
+        val barH = 6f
+        val barY = y + h - barH - 8f
+        val barX = x + pad
+        val barW = w - pad * 2
+        drawRoundedRect(barX, barY, barX + barW, barY + barH, Color(107, 123, 140, 80).rgb, barH / 2)
+        if (percentage > 0.001f) {
+            drawRoundedRect(barX, barY, barX + barW * percentage, barY + barH, Color(160, 200, 220).rgb, barH / 2)
+        }
+    }
+
+    private fun renderCardMusic(x: Float, y: Float, w: Float, h: Float) {
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        val musicName = MusicPlayer.currentMusicName
+        val lyric = MusicPlayer.currentLyricDisplay
+        val displayText = if (musicName != "None" && musicName != "无") musicName else lyric.take(20)
+        val progress = MusicPlayer.progress.coerceIn(0f, 1f)
+        val pad = 12f
+        val iconSz = 34f
+        val iconX = x + pad
+        val iconY = y + (h - iconSz) / 2f - 4f
+
+        // Album square
+        drawRoundedRect(iconX, iconY, iconX + iconSz, iconY + iconSz, Color(107, 123, 140, 100).rgb, 8f)
+        val mIconSz = 20
+        drawImage(ResourceLocation("airclient/watermark_images/music.png"),
+            (iconX + (iconSz - mIconSz) / 2).toInt(), (iconY + (iconSz - mIconSz) / 2).toInt(), mIconSz, mIconSz, Color(180, 200, 220))
+
+        // Two-line text
+        val textX = iconX + iconSz + 10f
+        val maxTextW = x + w - pad - textX
+        val line1Y = y + 10f
+        val line2Y = line1Y + Fonts.fontSemibold35.FONT_HEIGHT + 2f
+
+        val displayName = truncateText(displayText, Fonts.fontSemibold35, maxTextW)
+        Fonts.fontSemibold35.drawString(displayName, textX, line1Y, Color(220, 230, 245).rgb)
+
+        if (lyric.isNotEmpty()) {
+            val lyricDisplay = truncateText(lyric.take(30), Fonts.fontRegular30, maxTextW)
+            Fonts.fontRegular30.drawString(lyricDisplay, textX, line2Y, Color(160, 180, 200, 200).rgb)
+        }
+
+        // Progress bar at bottom
+        val barH = 5f
+        val barY = y + h - barH - 8f
+        val barX = x + pad
+        val barW = w - pad * 2
+        drawRoundedRect(barX, barY, barX + barW, barY + barH, Color(107, 123, 140, 80).rgb, barH / 2)
+        if (progress > 0.001f) {
+            drawRoundedRect(barX, barY, barX + barW * progress, barY + barH, Color(160, 200, 220).rgb, barH / 2)
+        }
     }
 
 }

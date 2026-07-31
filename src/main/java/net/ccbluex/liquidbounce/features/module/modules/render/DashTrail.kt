@@ -30,7 +30,6 @@ import net.minecraft.util.Vec3
 import org.lwjgl.opengl.GL11
 import java.awt.Color
 import java.util.*
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.*
 
 object DashTrail : Module("DashTrail", Category.RENDER) {
@@ -70,7 +69,11 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
     private const val MAX_CUBICS = 200
     private const val MAX_SPARKS_PER_CUBIC = 30
 
-    private val dashCubics: MutableList<DashCubic> = CopyOnWriteArrayList()
+    // onUpdate/onEntityMove/onRender3D 均在主线程触发，无需 CopyOnWriteArrayList
+    // 使用 ArrayList 避免 CopyOnWriteArrayList 的复制开销和 forEach 快照分配
+    private val dashCubics: MutableList<DashCubic> = ArrayList()
+    // 复用缓冲区: 避免每帧 filter 创建新 ArrayList 造成 GC 压力
+    private val filteredCubicsBuffer = ArrayList<DashCubic>()
     private val tessellator: Tessellator = Tessellator.getInstance()
     private val worldRenderer: WorldRenderer = tessellator.worldRenderer
     private val randomGenerator = Random()
@@ -233,14 +236,16 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
             setPosition(mc.renderViewEntity.posX, mc.renderViewEntity.posY, mc.renderViewEntity.posZ)
         }
 
-        val filteredCubics = dashCubics.filter { dashCubic ->
+        // 复用缓冲区，避免每帧 filter 分配新 ArrayList
+        filteredCubicsBuffer.clear()
+        for (dashCubic in dashCubics) {
             val entity = dashCubic.base.entity
 
-            if(!renderPlayers && entity != mc.thePlayer) return@filter false
+            if (!renderPlayers && entity != mc.thePlayer) continue
 
             val distanceSq = mc.thePlayer.getDistanceSqToEntity(entity)
-            if (distanceSq > maxRenderDistanceSq) return@filter false
-            if (renderOnLook && !isLookingOnEntities(entity, maxAngleDifference.toDouble())) return@filter false
+            if (distanceSq > maxRenderDistanceSq) continue
+            if (renderOnLook && !isLookingOnEntities(entity, maxAngleDifference.toDouble())) continue
 
             val x = dashCubic.getRenderPosX(partialTicks)
             val y = dashCubic.getRenderPosY(partialTicks)
@@ -250,8 +255,11 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
                 0.2 * dashCubic.animationProgress.toDouble(),
                 0.2 * dashCubic.animationProgress.toDouble()
             )
-            frustum.isBoundingBoxInFrustum(bbox)
+            if (frustum.isBoundingBoxInFrustum(bbox)) {
+                filteredCubicsBuffer.add(dashCubic)
+            }
         }
+        val filteredCubics = filteredCubicsBuffer
 
         if (enableGlow && filteredCubics.isNotEmpty()) {
             withDashRenderState({
@@ -366,7 +374,8 @@ object DashTrail : Module("DashTrail", Category.RENDER) {
         var animationProgress: Float = 1.0f
         private var startTime: Long = System.currentTimeMillis()
         val rotationAngles = floatArrayOf(0.0f, 0.0f)
-        val dashSparks: MutableList<DashSpark> = CopyOnWriteArrayList()
+        // 所有访问均在主线程，无需 CopyOnWriteArrayList
+        val dashSparks: MutableList<DashSpark> = ArrayList()
 
         init {
             if (sqrt(base.motionX * base.motionX + base.motionZ * base.motionZ) < 5.0E-4) {

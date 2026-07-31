@@ -9,7 +9,6 @@ import net.ccbluex.liquidbounce.event.EventManager;
 import net.ccbluex.liquidbounce.features.module.modules.combat.Criticals;
 import net.ccbluex.liquidbounce.features.module.modules.exploit.GhostHand;
 import net.ccbluex.liquidbounce.features.module.modules.player.NoFall;
-import net.ccbluex.liquidbounce.features.module.modules.render.WorldReplace;
 import net.ccbluex.liquidbounce.features.module.modules.render.XRay;
 import net.ccbluex.liquidbounce.features.module.modules.world.NoSlowBreak;
 import net.minecraft.block.Block;
@@ -75,8 +74,6 @@ public abstract class MixinBlock {
     private void shouldSideBeRendered(IBlockAccess p_shouldSideBeRendered_1_, BlockPos p_shouldSideBeRendered_2_, EnumFacing p_shouldSideBeRendered_3_, CallbackInfoReturnable<Boolean> cir) {
         if (XRay.INSTANCE.handleEvents()) {
             cir.setReturnValue(XRay.INSTANCE.getXrayBlocks().contains((Block) (Object) this));
-        } else if (WorldReplace.INSTANCE.handleEvents() && WorldReplace.INSTANCE.getXrayMode()) {
-            cir.setReturnValue(false);
         }
     }
 
@@ -92,8 +89,6 @@ public abstract class MixinBlock {
     @Inject(method = "getAmbientOcclusionLightValue", at = @At("HEAD"), cancellable = true)
     private void getAmbientOcclusionLightValue(CallbackInfoReturnable<Float> cir) {
         if (XRay.INSTANCE.handleEvents()) {
-            cir.setReturnValue(1F);
-        } else if (WorldReplace.INSTANCE.handleEvents() && WorldReplace.INSTANCE.getXrayMode()) {
             cir.setReturnValue(1F);
         }
     }

@@ -19,6 +19,7 @@ import net.ccbluex.liquidbounce.utils.client.javaVersion
 import net.ccbluex.liquidbounce.utils.io.MiscUtils
 import net.ccbluex.liquidbounce.file.configs.models.ClientConfiguration
 import net.ccbluex.liquidbounce.ui.client.mainmenu.CustomMainMenu
+import net.ccbluex.liquidbounce.ui.client.mainmenu.MainMenuStyles
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorderRect
 import net.ccbluex.liquidbounce.utils.timing.MSTimer
 import net.ccbluex.liquidbounce.utils.ui.AbstractScreen
@@ -224,8 +225,8 @@ class GuiMainMenu : AbstractScreen() {
             2f, switchBtnColor, switchBtnColor, 2f
         )
         Fonts.fontSemibold35.drawCenteredString(
-            "Switch Style", 
-            switchBtnX + switchBtnWidth / 2f, 
+            MainMenuStyles.displayName(ClientConfiguration.mainMenuStyle),
+            switchBtnX + switchBtnWidth / 2f,
             switchBtnY + (switchBtnHeight - Fonts.fontSemibold35.FONT_HEIGHT) / 2f,
             switchTextColor, true
         )
@@ -251,9 +252,9 @@ class GuiMainMenu : AbstractScreen() {
                                mouseY >= switchBtnY && mouseY <= switchBtnY + switchBtnHeight
         
         if (isHoveringSwitch && mouseButton == 0 && switchButtonTimer.hasTimePassed(200)) {
-            ClientConfiguration.mainMenuStyle = "Custom"
+            ClientConfiguration.mainMenuStyle = MainMenuStyles.next(ClientConfiguration.mainMenuStyle)
             FileManager.saveConfig(valuesConfig)
-            mc.displayGuiScreen(CustomMainMenu())
+            mc.displayGuiScreen(MainMenuStyles.createScreen(ClientConfiguration.mainMenuStyle) as net.minecraft.client.gui.GuiScreen)
             switchButtonTimer.reset()
             return
         }

@@ -43,6 +43,8 @@ object FireFlies : Module("FireFlies", Category.RENDER, gameDetecting = false) {
     private val spawnDelay by float("SpawnDelay", 3.0f, 1.0f..10.0f)
 
     private val partList = ArrayList<FirePart>()
+    // 复用缓冲区: 避免每帧 mutableSetOf 创建新 HashSet
+    private val renderedPartsBuffer = HashSet<FirePart>()
     private val icon = ResourceLocation("${CLIENT_NAME.lowercase()}/firepart.png")
 
     private val tessellator = Tessellator.getInstance()
@@ -59,19 +61,12 @@ object FireFlies : Module("FireFlies", Category.RENDER, gameDetecting = false) {
     }
 
     private fun generateVecForPart(rangeXZ: Double, rangeY: Double): Vec3 {
-        var pos = mc.thePlayer.positionVector.addVector(
+        // 原实现 repeat(30) 创建 31 个 Vec3 但只保留最后一个，纯属浪费
+        return mc.thePlayer.positionVector.addVector(
             getRandom(-rangeXZ, rangeXZ).toDouble(),
             getRandom(-rangeY / 2.0, rangeY).toDouble(),
             getRandom(-rangeXZ, rangeXZ).toDouble()
         )
-        repeat(30) {
-            pos = mc.thePlayer.positionVector.addVector(
-                getRandom(-rangeXZ, rangeXZ).toDouble(),
-                getRandom(-rangeY / 2.0, rangeY).toDouble(),
-                getRandom(-rangeXZ, rangeXZ).toDouble()
-            )
-        }
-        return pos
     }
 
     private fun setupGLDrawsFireParts(partsRender: Runnable) {
@@ -203,9 +198,9 @@ object FireFlies : Module("FireFlies", Category.RENDER, gameDetecting = false) {
         if (partList.isNotEmpty()) {
             setupGLDrawsFireParts {
                 bindResource(icon)
-                val renderedParts = mutableSetOf<FirePart>()
+                renderedPartsBuffer.clear()
                 partList.forEach { part ->
-                    drawPart(part, event.partialTicks, renderedParts)
+                    drawPart(part, event.partialTicks, renderedPartsBuffer)
                 }
             }
         }

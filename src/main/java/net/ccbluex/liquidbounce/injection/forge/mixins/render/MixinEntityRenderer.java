@@ -27,6 +27,7 @@ import net.minecraft.util.*;
 import net.minecraft.world.World;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
+import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -97,7 +98,14 @@ public abstract class MixinEntityRenderer {
         if (ClientUtils.INSTANCE.getProfilerName().equals("hand")) {
             FreeLook.INSTANCE.runWithoutSavingRotations(() -> {
                 FreeLook.INSTANCE.restoreOriginalRotation();
-                EventManager.INSTANCE.call(new Render3DEvent(partialTicks));
+                GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+                GL11.glPushMatrix();
+                try {
+                    EventManager.INSTANCE.call(new Render3DEvent(partialTicks));
+                } finally {
+                    GL11.glPopMatrix();
+                    GL11.glPopAttrib();
+                }
                 FreeLook.INSTANCE.useModifiedRotation();
                 return null;
             });

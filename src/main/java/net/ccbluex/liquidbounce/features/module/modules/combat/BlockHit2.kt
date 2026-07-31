@@ -88,6 +88,13 @@ object BlockHit2 : Module("BlockHit2", Category.COMBAT, defaultState = false) {
         mc.gameSettings.keyBindUseItem.pressed = false
     }
 
+    private fun releaseUseItemIfNeeded() {
+        // 仅在玩家没有物理按住右键时才释放 pressed
+        if (!mc.gameSettings.keyBindUseItem.isKeyDown) {
+            mc.gameSettings.keyBindUseItem.pressed = false
+        }
+    }
+
     private fun pressUseItemOnce() {
         // 模拟一次右键点击：增加 pressTime 让游戏认为玩家按下了一次
         mc.gameSettings.keyBindUseItem.pressTime = mc.gameSettings.keyBindUseItem.pressTime + 1
@@ -130,19 +137,25 @@ object BlockHit2 : Module("BlockHit2", Category.COMBAT, defaultState = false) {
         // Helper 模式: 玩家手动攻击时短暂停止格挡以发出攻击
         if (mode == "Helper") {
             if (mc.gameSettings.keyBindAttack.isKeyDown) {
-                if (player.isBlocking) {
+                if (player.isBlocking && !startBlocking) {
                     startBlocking = true
+                    stopTick = 0
                     releaseUseItem()
                 }
             }
-            if (startBlocking) stopTick++
-            if (stopTick == 2) {
-                pressAttackOnce()
-            }
-            if (stopTick > stopTime) {
-                pressUseItem()
-                startBlocking = false
-                stopTick = 0
+            if (startBlocking) {
+                // 在 stopBlocking 期间，持续阻止原生右键恢复
+                mc.gameSettings.keyBindUseItem.pressed = false
+                stopTick++
+                if (stopTick == 2) {
+                    pressAttackOnce()
+                }
+                if (stopTick > stopTime) {
+                    // 恢复格挡
+                    pressUseItem()
+                    startBlocking = false
+                    stopTick = 0
+                }
             }
             return@handler
         }
@@ -194,7 +207,7 @@ object BlockHit2 : Module("BlockHit2", Category.COMBAT, defaultState = false) {
                         holdTicks++
                     }
                     if (holdTicks > holdTick) {
-                        releaseUseItem()
+                        releaseUseItemIfNeeded()
                         startBlocking = false
                         holdTicks = 0
                         timer.reset()
@@ -207,7 +220,7 @@ object BlockHit2 : Module("BlockHit2", Category.COMBAT, defaultState = false) {
                     pressUseItem()
                     startBlocking = true
                 } else if (startBlocking) {
-                    releaseUseItem()
+                    releaseUseItemIfNeeded()
                     startBlocking = false
                 }
             }
@@ -218,7 +231,7 @@ object BlockHit2 : Module("BlockHit2", Category.COMBAT, defaultState = false) {
                     sagTicks++
                 }
                 if (sagTicks >= 10) {
-                    releaseUseItem()
+                    releaseUseItemIfNeeded()
                     sagTicks = 0
                 }
             }
@@ -233,12 +246,12 @@ object BlockHit2 : Module("BlockHit2", Category.COMBAT, defaultState = false) {
                 }
                 if (player.hurtTime == 9 && releaseAfterHit) {
                     canBlock = false
-                    releaseUseItem()
+                    releaseUseItemIfNeeded()
                     getBlockTicks = 0
                 }
                 if (getBlockTicks > smartBlockTick) {
                     canBlock = false
-                    releaseUseItem()
+                    releaseUseItemIfNeeded()
                     getBlockTicks = 0
                 }
             }

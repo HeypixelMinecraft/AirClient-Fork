@@ -71,7 +71,7 @@ public abstract class MixinSplashProgress {
      * 与 setup 目录下的图片对应
      */
     private static final String[] SPLASH_BACKGROUNDS = {
-        "splash", "qcf", "cat", "MCDOG"
+        "splash", "miku", "Mortis", "ba", "cat", "girl", "girl2", "qcf", "soyo", "youxiang"
     };
 
     /**

@@ -26,34 +26,38 @@ abstract class Shader : MinecraftInstance {
     constructor(fragmentShader: String) {
         val vertexShaderID: Int
         val fragmentShaderID: Int
-        
+
         try {
             val vertexStream = javaClass.getResourceAsStream("/assets/minecraft/airclient/shader/vertex.vert")
             vertexShaderID = createShader(IOUtils.toString(vertexStream), ARBVertexShader.GL_VERTEX_SHADER_ARB)
             IOUtils.closeQuietly(vertexStream)
-            
+
             val fragmentStream = javaClass.getResourceAsStream("/assets/minecraft/airclient/shader/$fragmentShader")
             fragmentShaderID = createShader(IOUtils.toString(fragmentStream), ARBFragmentShader.GL_FRAGMENT_SHADER_ARB)
             IOUtils.closeQuietly(fragmentStream)
         } catch (e: Exception) {
-            e.printStackTrace()
+            LOGGER.warn("[Shader] Failed to load shader '$fragmentShader' (may be unsupported on this platform): ${e.message}")
             return
         }
-        
-        if (vertexShaderID == 0 || fragmentShaderID == 0)
+
+        if (vertexShaderID == 0 || fragmentShaderID == 0) {
+            LOGGER.warn("[Shader] Shader compilation failed for '$fragmentShader', disabling.")
             return
-        
+        }
+
         programId = glCreateProgramObjectARB()
-        
-        if (programId == 0)
+
+        if (programId == 0) {
+            LOGGER.warn("[Shader] Failed to create program for '$fragmentShader', disabling.")
             return
-        
+        }
+
         glAttachObjectARB(programId, vertexShaderID)
         glAttachObjectARB(programId, fragmentShaderID)
-        
+
         glLinkProgramARB(programId)
         glValidateProgramARB(programId)
-        
+
         LOGGER.info("[Shader] Successfully loaded: $fragmentShader")
     }
 
@@ -61,29 +65,38 @@ abstract class Shader : MinecraftInstance {
     constructor(fragmentShader: File) {
         val vertexShaderID: Int
         val fragmentShaderID: Int
-        
-        val vertexStream = javaClass.getResourceAsStream("/assets/minecraft/airclient/shader/vertex.vert")
-        vertexShaderID = createShader(IOUtils.toString(vertexStream), ARBVertexShader.GL_VERTEX_SHADER_ARB)
-        IOUtils.closeQuietly(vertexStream)
-        
-        val fragmentStream = Files.newInputStream(fragmentShader.toPath())
-        fragmentShaderID = createShader(IOUtils.toString(fragmentStream), ARBFragmentShader.GL_FRAGMENT_SHADER_ARB)
-        IOUtils.closeQuietly(fragmentStream)
-        
-        if (vertexShaderID == 0 || fragmentShaderID == 0)
+
+        try {
+            val vertexStream = javaClass.getResourceAsStream("/assets/minecraft/airclient/shader/vertex.vert")
+            vertexShaderID = createShader(IOUtils.toString(vertexStream), ARBVertexShader.GL_VERTEX_SHADER_ARB)
+            IOUtils.closeQuietly(vertexStream)
+
+            val fragmentStream = Files.newInputStream(fragmentShader.toPath())
+            fragmentShaderID = createShader(IOUtils.toString(fragmentStream), ARBFragmentShader.GL_FRAGMENT_SHADER_ARB)
+            IOUtils.closeQuietly(fragmentStream)
+        } catch (e: Exception) {
+            LOGGER.warn("[Shader] Failed to load shader '${fragmentShader.name}' (may be unsupported on this platform): ${e.message}")
             return
-        
+        }
+
+        if (vertexShaderID == 0 || fragmentShaderID == 0) {
+            LOGGER.warn("[Shader] Shader compilation failed for '${fragmentShader.name}', disabling.")
+            return
+        }
+
         programId = glCreateProgramObjectARB()
-        
-        if (programId == 0)
+
+        if (programId == 0) {
+            LOGGER.warn("[Shader] Failed to create program for '${fragmentShader.name}', disabling.")
             return
-        
+        }
+
         glAttachObjectARB(programId, vertexShaderID)
         glAttachObjectARB(programId, fragmentShaderID)
-        
+
         glLinkProgramARB(programId)
         glValidateProgramARB(programId)
-        
+
         LOGGER.info("[Shader] Successfully loaded: " + fragmentShader.name)
     }
 
@@ -91,34 +104,38 @@ abstract class Shader : MinecraftInstance {
     constructor(fragmentShader: ResourceLocation) {
         val vertexShaderID: Int
         val fragmentShaderID: Int
-        
+
         try {
             val vertexStream = javaClass.getResourceAsStream("/assets/minecraft/airclient/shader/vertex.vert")
             vertexShaderID = createShader(IOUtils.toString(vertexStream), ARBVertexShader.GL_VERTEX_SHADER_ARB)
             IOUtils.closeQuietly(vertexStream)
-            
+
             val fragmentStream = mc.resourceManager.getResource(fragmentShader).inputStream
             fragmentShaderID = createShader(IOUtils.toString(fragmentStream), ARBFragmentShader.GL_FRAGMENT_SHADER_ARB)
             IOUtils.closeQuietly(fragmentStream)
         } catch (e: Exception) {
-            e.printStackTrace()
+            LOGGER.warn("[Shader] Failed to load shader '${fragmentShader.resourcePath}' (may be unsupported on this platform): ${e.message}")
             return
         }
-        
-        if (vertexShaderID == 0 || fragmentShaderID == 0)
+
+        if (vertexShaderID == 0 || fragmentShaderID == 0) {
+            LOGGER.warn("[Shader] Shader compilation failed for '${fragmentShader.resourcePath}', disabling.")
             return
-        
+        }
+
         programId = glCreateProgramObjectARB()
-        
-        if (programId == 0)
+
+        if (programId == 0) {
+            LOGGER.warn("[Shader] Failed to create program for '${fragmentShader.resourcePath}', disabling.")
             return
-        
+        }
+
         glAttachObjectARB(programId, vertexShaderID)
         glAttachObjectARB(programId, fragmentShaderID)
-        
+
         glLinkProgramARB(programId)
         glValidateProgramARB(programId)
-        
+
         LOGGER.info("[Shader] Successfully loaded: ${fragmentShader.resourcePath}")
     }
 

@@ -4,6 +4,7 @@
  */
 package net.ccbluex.liquidbounce.injection.forge.mixins.render;
 
+import net.ccbluex.liquidbounce.features.module.modules.combat.BlockHit;
 import net.ccbluex.liquidbounce.features.module.modules.combat.KillAura;
 import net.ccbluex.liquidbounce.features.module.modules.movement.NoSlow;
 import net.ccbluex.liquidbounce.features.module.modules.render.SilentHotbarModule;
@@ -64,7 +65,7 @@ public class MixinLayerHeldItem {
 
             final EntityPlayer entityplayer = entity instanceof EntityPlayer ? (EntityPlayer) entity : null;
 
-            if (entityplayer != null && (((EntityPlayer) entityplayer).isBlocking() || entityplayer instanceof EntityPlayerSP && ((itemstack.getItem() instanceof ItemSword && KillAura.INSTANCE.getRenderBlocking()) || NoSlow.INSTANCE.isUNCPBlocking()))) {
+            if (entityplayer != null && (((EntityPlayer) entityplayer).isBlocking() || entityplayer instanceof EntityPlayerSP && ((itemstack.getItem() instanceof ItemSword && (KillAura.INSTANCE.getRenderBlocking() || BlockHit.INSTANCE.isBlocking())) || NoSlow.INSTANCE.isUNCPBlocking()))) {
                 if (((Entity) entity).isSneaking()) {
                     ((ModelBiped) livingEntityRenderer.getMainModel()).postRenderArm(0.0325F);
                     translate(-0.58F, 0.3F, -0.2F);

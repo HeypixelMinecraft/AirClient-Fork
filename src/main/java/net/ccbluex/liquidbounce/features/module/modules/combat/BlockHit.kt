@@ -21,8 +21,6 @@ object BlockHit : Module("BlockHit", Category.COMBAT) {
 
     private val range by float("Range", 3F, 1F..6F)
     private val blockTicks by int("BlockTicks", 5, 1..20)
-    private val requireRightClick by boolean("RequireRightClick", false)
-    private val alwaysBlockAnim by boolean("AlwaysBlockAnim", false)
 
     private var blockCounter = 0
     var isBlocking = false
@@ -61,9 +59,6 @@ object BlockHit : Module("BlockHit", Category.COMBAT) {
         val distSq = player.getDistanceSqToEntity(target)
         if (distSq > (range * range).toDouble()) return@handler
 
-        // Check requireRightClick setting
-        if (requireRightClick && !mc.gameSettings.keyBindUseItem.isKeyDown) return@handler
-
         // Start blocking
         blockCounter = blockTicks
         startBlocking()
@@ -91,11 +86,6 @@ object BlockHit : Module("BlockHit", Category.COMBAT) {
             // Keep blocking - ensure right click is pressed
             if (!isBlocking) {
                 startBlocking()
-            }
-
-            // If alwaysBlockAnim, re-press the key each tick to sustain animation
-            if (alwaysBlockAnim) {
-                mc.gameSettings.keyBindUseItem.pressed = true
             }
 
             blockCounter--

@@ -16,6 +16,7 @@ import net.ccbluex.liquidbounce.file.configs.models.ClientConfiguration;
 import net.ccbluex.liquidbounce.injection.forge.SplashProgressLock;
 import net.ccbluex.liquidbounce.ui.client.GuiMainMenu;
 import net.ccbluex.liquidbounce.ui.client.mainmenu.CustomMainMenu;
+import net.ccbluex.liquidbounce.ui.client.mainmenu.MainMenuStyles;
 import net.ccbluex.liquidbounce.utils.attack.CPSCounter;
 import net.ccbluex.liquidbounce.utils.client.ClientUtils;
 import net.ccbluex.liquidbounce.utils.inventory.SilentHotbar;
@@ -147,8 +148,10 @@ public abstract class MixinMinecraft {
     @Inject(method = "displayGuiScreen", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;currentScreen:Lnet/minecraft/client/gui/GuiScreen;", shift = At.Shift.AFTER))
     private void handleDisplayGuiScreen(CallbackInfo callbackInfo) {
         if (currentScreen instanceof net.minecraft.client.gui.GuiMainMenu || (currentScreen != null && currentScreen.getClass().getName().startsWith("net.labymod") && currentScreen.getClass().getSimpleName().equals("ModGuiMainMenu"))) {
-            if ("Custom".equals(ClientConfiguration.INSTANCE.getMainMenuStyle())) {
-                currentScreen = new CustomMainMenu();
+            String style = ClientConfiguration.INSTANCE.getMainMenuStyle();
+            Object screen = MainMenuStyles.createScreen(style);
+            if (screen instanceof net.minecraft.client.gui.GuiScreen) {
+                currentScreen = (net.minecraft.client.gui.GuiScreen) screen;
             } else {
                 currentScreen = new GuiMainMenu();
             }
