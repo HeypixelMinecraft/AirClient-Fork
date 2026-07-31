@@ -43,6 +43,7 @@ import net.minecraft.network.play.server.S27PacketExplosion
 import net.minecraft.network.play.server.S32PacketConfirmTransaction
 import net.minecraft.util.AxisAlignedBB
 import net.minecraft.util.BlockPos
+import net.minecraft.util.EnumFacing
 import net.minecraft.util.EnumFacing.DOWN
 import net.minecraft.util.MovingObjectPosition
 import net.minecraft.world.WorldSettings
@@ -75,7 +76,7 @@ object Velocity : Module("Velocity", Category.COMBAT) {
             "Intave13GommeZero", "AAC3.3.12", "AAC3.3.14", "Intave13Wall",
             "Intave13Old", "Matrix6.6.1", "Vulcan2.0.1", "GrimCombat",
             "AAC4Reduce", "AAC5Reduce", "AAC5.2.0", "AAC5.2.0Combat",
-            "Grim", "Grim1.17", "GrimC07", "GrimDamage", "MatrixReverse",
+            "Grim", "Grim1.17", "GrimC07", "GrimDamage", "OldGrim", "MatrixReverse",
             "MatrixSimple", "HypixelBoost", "Minemen", "Phase", "SideStrafe",
             "Spoof", "Tick"
         ), "Simple"
@@ -199,6 +200,9 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private val raycastValue by boolean("RayCast", false) { mode == "GrimCombat" }
     private val debugMessageValue by boolean("Debug", true) { mode == "GrimCombat" }
 
+    // OldGrim
+    private val grimVelocityDebug by boolean("OldGrimDebug", false) { mode == "OldGrim" }
+
     // Prediction
     private val predictionClicks by intRange("PredictionClicks", 1..2, 1..20) { mode == "Prediction" }
     private val predictionJump by boolean("PredictionJump", true) { mode == "Prediction" }
@@ -294,6 +298,10 @@ object Velocity : Module("Velocity", Category.COMBAT) {
     private var velY = 0
     private var velZ = 0
 
+    // OldGrim
+    private var grimVelocityRealVelocity = false
+    private var grimVelocityNeedDigging = false
+
     // Intave13KeepLow
     private var wasOnGround = false
 
@@ -362,6 +370,8 @@ object Velocity : Module("Velocity", Category.COMBAT) {
         grimUpdates = 0
         grimC07GotVelocity = false
         grimC07FlagTimer.reset()
+        grimVelocityRealVelocity = false
+        grimVelocityNeedDigging = false
         minemenTicks = 0
         minemenLastCancel = false
         minemenCanCancel = false
@@ -522,6 +532,26 @@ object Velocity : Module("Velocity", Category.COMBAT) {
 
             "tick" -> handleTickVelocityUpdate(thePlayer)
 
+            "oldgrim" -> {
+                if (grimVelocityNeedDigging) {
+                    val action = if (mc.objectMouseOver != null &&
+                                     thePlayer.isSwingInProgress &&
+                                     mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                        C07PacketPlayerDigging.Action.START_DESTROY_BLOCK
+                    } else {
+                        C07PacketPlayerDigging.Action.STOP_DESTROY_BLOCK
+                    }
+
+                    val blockPos = BlockPos(thePlayer.posX, thePlayer.posY, thePlayer.posZ)
+                    sendPacket(C07PacketPlayerDigging(action, blockPos, EnumFacing.UP))
+
+                    if (grimVelocityDebug) {
+                        chat("OldGrim: Sent digging packet with action: $action")
+                    }
+
+                    grimVelocityNeedDigging = false
+                }
+            }
 
             "grimcombat" -> {
                 if (attacked) {
@@ -811,6 +841,18 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                 return@handler
             }
 
+            // OldGrim: detect real damage via S19PacketEntityStatus
+            if (mode == "OldGrim" && packet is S19PacketEntityStatus) {
+                val entity = packet.getEntity(mc.theWorld)
+                if (entity == thePlayer && packet.getOpCode().toInt() == 2) {
+                    grimVelocityRealVelocity = true
+                    if (grimVelocityDebug) {
+                        chat("OldGrim: §aReal damage detected§r")
+                    }
+                    return@handler
+                }
+            }
+
             when (mode.lowercase()) {
                 "simple" -> handleVelocity(event)
 
@@ -876,6 +918,19 @@ object Velocity : Module("Velocity", Category.COMBAT) {
                     if (packet is S12PacketEntityVelocity && packet.entityID == thePlayer.entityId) {
                         event.cancelEvent()
                         grimTCancel = 6
+                    }
+                }
+
+                "oldgrim" -> {
+                    if (packet is S12PacketEntityVelocity && grimVelocityRealVelocity) {
+                        if (packet.entityID == thePlayer.entityId) {
+                            event.cancelEvent()
+                            grimVelocityRealVelocity = false
+                            grimVelocityNeedDigging = true
+                            if (grimVelocityDebug) {
+                                chat("OldGrim: §cVelocity cancelled§r, scheduling digging")
+                            }
+                        }
                     }
                 }
 
