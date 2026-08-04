@@ -76,7 +76,7 @@ object JumpCircle : Module("JumpCircle", Category.RENDER, gameDetecting = false)
         val groupFrameLengths = intArrayOf(100, 200)
         val groupFrameFormats = arrayOf("jpeg", "png")
 
-        for (groupIndex in groupFrameLengths.indices.reversed()) {
+        for (groupIndex in (groupFrameLengths.size - 1) downTo 0) {
             val frames = groupFrameLengths[groupIndex]
             val format = groupFrameFormats[groupIndex]
 

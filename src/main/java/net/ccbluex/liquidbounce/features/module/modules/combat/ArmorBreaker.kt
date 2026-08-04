@@ -20,13 +20,13 @@ import net.minecraft.item.ItemSword
 /**
  * ArmorBreaker - 通过快速轮换武器破坏对方盔甲
  *
- * 逻辑:
+ * 改进逻辑:
  *   1. 攻击对方时，快照所有武器（热栏+主背包），按伤害从高到低排序
  *   2. 轮换阶段：每tick把快照中下一把武器交换到当前手持热栏位置
  *      - 热栏武器(0-8)：直接切换 currentItem
  *      - 背包武器(9-35)：通过 windowClick(mode=2) 交换到 currentItem 热栏位置
- *   3. 优先级: 自己可被攻击 > 可以攻击对方 > 轮换
- *   4. 高优先级条件满足时，把当前最高伤害武器切到手上
+ *   3. 优先级: 目标可被攻击 > 自己可被攻击 > 轮换
+ *   4. 目标无敌帧时轮换武器，目标可被攻击时切回最高伤害武器
  */
 object ArmorBreaker : Module("ArmorBreaker", Category.COMBAT, spacedName = "Armor Breaker") {
 
@@ -91,17 +91,13 @@ object ArmorBreaker : Module("ArmorBreaker", Category.COMBAT, spacedName = "Armo
             return@handler
         }
 
-        // 优先级1: 自己即将可被攻击 (hurtTime==1) → 提前切换为剑准备格挡
+        // 优先级1: 目标可被攻击 (hurtTime==0) → 切到最高伤害武器
         // 优先级2: 自己可被攻击 (hurtTime==0) → 确保手上有武器格挡
-        // 优先级3: 可以攻击对方 → 切到最高伤害武器
-        // 优先级4: 两者都在无敌帧 → 轮换
+        // 优先级3: 两者都在无敌帧 → 轮换
         when {
-            player.hurtTime == 1 && axeMode -> {
-                // 提前1tick切换为剑，为格挡做准备
-                if (player.heldItem?.item !is ItemSword) {
-                    debug("HurtTime=1, switching to sword for blocking")
-                    switchToBestSword()
-                }
+            tgt.hurtTime == 0 -> {
+                if (isCycling) debug("Can attack target → hold best weapon")
+                switchToBestWeapon()
                 isCycling = false
             }
             player.hurtTime == 0 -> {
@@ -114,22 +110,8 @@ object ArmorBreaker : Module("ArmorBreaker", Category.COMBAT, spacedName = "Armo
                 if (!isHoldingWeapon) {
                     if (isCycling) debug("Can be damaged, not holding weapon → force hold best weapon")
                     switchToBestWeapon()
-                } else {
-                    if (isCycling) debug("Can be damaged, already holding weapon → stop cycling")
                 }
                 isCycling = false
-            }
-            tgt.hurtTime == 0 -> {
-                if (isCycling) debug("Can attack → hold best weapon")
-                switchToBestWeapon()
-                isCycling = false
-            }
-            player.hurtTime > 1 && axeMode && isCycling && cycleIndex < cycleWeapons.size -> {
-                // Axe模式：自己处于无敌帧(hurtTime>1)时允许使用斧头轮换
-                val (slot, damage) = cycleWeapons[cycleIndex]
-                debug("Cycling (axe allowed) → weapon at slot $slot (damage=${String.format("%.1f", damage)}), ${cycleIndex + 1}/${cycleWeapons.size}")
-                swapWeaponToHand(slot)
-                cycleIndex++
             }
             isCycling && cycleIndex < cycleWeapons.size -> {
                 // 轮换：把第 cycleIndex 把武器换到手上
@@ -162,18 +144,6 @@ object ArmorBreaker : Module("ArmorBreaker", Category.COMBAT, spacedName = "Armo
             }
             if (isWeapon) slot to stack.attackDamage else null
         }.sortedByDescending { it.second }
-    }
-
-    /**
-     * 切换到当前伤害最高的剑（用于格挡）。
-     */
-    private fun switchToBestSword() {
-        val player = mc.thePlayer ?: return
-        val best = (0..35).mapNotNull { slot ->
-            val stack = player.inventory.getStackInSlot(slot) ?: return@mapNotNull null
-            if (stack.item is ItemSword) slot to stack.attackDamage else null
-        }.sortedByDescending { it.second }.firstOrNull() ?: return
-        swapWeaponToHand(best.first)
     }
 
     /**

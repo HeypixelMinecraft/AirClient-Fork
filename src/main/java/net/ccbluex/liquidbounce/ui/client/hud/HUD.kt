@@ -48,8 +48,8 @@ object HUD : MinecraftInstance {
         Keystrokes::class.java,
         MusicLyric::class.java,
         Watermark::class.java,
-        NewArrayList::class.java
-    )
+        NewArrayList::class.java,
+        )
 
     val ELEMENTS: IdentityHashMap<Class<out Element>, ElementInfo?> = ALL_ELEMENT_CLASSES.associateWithTo(IdentityHashMap(ALL_ELEMENT_CLASSES.size)) {
         it.getAnnotation(ElementInfo::class.java)
@@ -105,7 +105,7 @@ object HUD : MinecraftInstance {
         )
 
         if (button == 0) {
-            for (element in elements.reversed()) {
+            for (element in elements.asReversed()) {
                 if (!element.isInBorder(
                         (mouseX / element.scale) - element.renderX, (mouseY / element.scale) - element.renderY
                     )

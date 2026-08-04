@@ -4,6 +4,8 @@
  */
 package net.ccbluex.liquidbounce.injection.forge.mixins.entity;
 
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
+import de.florianmichael.vialoadingbase.ViaLoadingBase;
 import net.ccbluex.liquidbounce.event.EventManager;
 import net.ccbluex.liquidbounce.event.EventState;
 import net.ccbluex.liquidbounce.event.JumpEvent;
@@ -130,6 +132,15 @@ public abstract class MixinEntityLivingBase extends MixinEntity {
 
         if (liquidWalk.handleEvents() && !isJumping && !isSneaking() && isInWater() && liquidWalk.getMode().equals("Swim")) {
             updateAITick();
+        }
+    }
+
+    @ModifyConstant(method = "onLivingUpdate", constant = @Constant(doubleValue = 0.005D))
+    private double modifyMotionCondition(double constant) {
+        if (ViaLoadingBase.getInstance().getTargetVersion().newerThan(ProtocolVersion.v1_8)) {
+            return 0.003D;
+        } else {
+            return constant;
         }
     }
 

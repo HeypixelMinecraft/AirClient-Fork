@@ -20,49 +20,12 @@ import javax.imageio.ImageIO
 
 sealed class Background(val backgroundFile: File) {
     companion object {
-        val BUILTIN_BACKGROUNDS = listOf(
-            "aurora",
-            "matrix",
-            "starfield",
-            "plasma",
-            "waves",
-            "fire",
-            "neongrid",
-            "rain",
-            "clouds",
-            "vortex",
-            "fractal",
-            "gradient"
-        )
-
-        val BUILTIN_BACKGROUND_NAMES = mapOf(
-            0 to "Aurora",
-            1 to "Matrix",
-            2 to "Starfield",
-            3 to "Plasma",
-            4 to "Waves",
-            5 to "Fire",
-            6 to "Neon Grid",
-            7 to "Rain",
-            8 to "Clouds",
-            9 to "Vortex",
-            10 to "Fractal",
-            11 to "Gradient"
-        )
-
         fun fromFile(backgroundFile: File): Background {
             return when (backgroundFile.extension) {
                 "png" -> ImageBackground(backgroundFile)
                 "frag", "glsl", "shader" -> ShaderBackground(backgroundFile)
                 else -> throw IllegalArgumentException("Invalid background file extension")
             }.also {
-                it.initBackground()
-            }
-        }
-
-        fun fromBuiltin(index: Int): BuiltinShaderBackground {
-            val safeIndex = index.coerceIn(0, BUILTIN_BACKGROUNDS.size - 1)
-            return BuiltinShaderBackground(safeIndex).also {
                 it.initBackground()
             }
         }
@@ -134,57 +97,5 @@ private class ShaderBackground(backgroundFile: File) : Background(backgroundFile
 
             shader.stopShader()
         }
-    }
-}
-
-class BuiltinShaderBackground(val index: Int) : Background(File("builtin")) {
-
-    private var shaderInitialized = false
-    private lateinit var shader: Shader
-    private val initializationLatch = CountDownLatch(1)
-
-    public override fun initBackground() {
-        val safeIndex = index.coerceIn(0, BUILTIN_BACKGROUNDS.size - 1)
-        val backgroundName = BUILTIN_BACKGROUNDS[safeIndex]
-        val resourceLocation = ResourceLocation("airclient/shader/backgrounds/$backgroundName.frag")
-
-        runCatching {
-            shader = BackgroundShader(resourceLocation)
-        }.onFailure {
-            LOGGER.error("Failed to load builtin background: $backgroundName", it)
-        }.onSuccess {
-            initializationLatch.countDown()
-            shaderInitialized = true
-            LOGGER.info("Successfully loaded builtin background: $backgroundName")
-        }
-    }
-
-    override fun drawBackground(width: Int, height: Int) {
-        if (!shaderInitialized) {
-            try {
-                initializationLatch.await()
-            } catch (e: Exception) {
-                LOGGER.error(e.message)
-                return
-            }
-        }
-
-        if (shaderInitialized) {
-            shader.startShader()
-
-            drawWithTessellatorWorldRenderer {
-                begin(7, DefaultVertexFormats.POSITION)
-                pos(0.0, height.toDouble(), 0.0).endVertex()
-                pos(width.toDouble(), height.toDouble(), 0.0).endVertex()
-                pos(width.toDouble(), 0.0, 0.0).endVertex()
-                pos(0.0, 0.0, 0.0).endVertex()
-            }
-
-            shader.stopShader()
-        }
-    }
-
-    fun getName(): String {
-        return BUILTIN_BACKGROUND_NAMES[index] ?: "Unknown"
     }
 }

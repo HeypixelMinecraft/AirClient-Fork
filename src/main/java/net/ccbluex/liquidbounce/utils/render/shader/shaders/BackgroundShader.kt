@@ -13,17 +13,12 @@ import java.io.IOException
 import net.minecraft.util.ResourceLocation
 
 class BackgroundShader : Shader {
-    constructor() : super("background.frag")
 
     @Throws(IOException::class)
     constructor(fragmentShader: File) : super(fragmentShader)
 
     @Throws(IOException::class)
     constructor(fragmentShader: ResourceLocation) : super(fragmentShader)
-
-    companion object {
-        val BACKGROUND_SHADER = BackgroundShader()
-    }
 
     private var time = 0f
 

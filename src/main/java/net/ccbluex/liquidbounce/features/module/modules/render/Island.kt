@@ -130,14 +130,14 @@ object Island : Module("Island", Category.RENDER) {
     private val breakProgressTheme by color("BreakProgressTheme", Color(225, 150, 65)) { style == "legacy" }
     private val breakProgressOnlyFuckerNuker by boolean("OnlyFuckerAndNuker", true) { breakProgressCheck }
 
-    private val showGappleProgress by boolean("GappleProgress", true) { style == "legacy" }
-    private val gappleProgressTheme by color("GappleProgressTheme", Color(255, 215, 0)) { style == "legacy" }
+    private val showGappleProgress by boolean("GappleProgress", true)
+    private val gappleProgressTheme by color("GappleProgressTheme", Color(255, 215, 0))
 
-    private val ChestTheme by boolean("Chest", true) { style == "legacy" || style == "ios" || style == "bar" }
-    private val ChestRounded by float("ChestRoundRadius", 4F, 0.0F..8.0F) { style == "legacy" }
+    private val ChestTheme by boolean("Chest", true)
+    private val ChestRounded by float("ChestRoundRadius", 4F, 0.0F..8.0F)
 
-    private val tabListCheck by boolean("TabList", true) { style == "legacy" }
-    private val tabListMaxRows by int("TabList-MaxRows", 20, 5..100) { style == "legacy" }
+    private val tabListCheck by boolean("TabList", true)
+    private val tabListMaxRows by int("TabList-MaxRows", 20, 5..100)
 
     private val bpsUpdateInterval by int("BPS-Update-Interval(ms)", 100, 50..500) { style == "legacy" }
     private val versionNameDown = clientVersionText
@@ -385,6 +385,53 @@ object Island : Module("Island", Category.RENDER) {
         }
     }
 
+    /**
+     * Shared tab list size calculation for all styles.
+     * Returns (width, height) based on player count, header/footer lines, and maxRows setting.
+     */
+    private fun calcTabListSize(players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>): Pair<Float, Float> {
+        val playerCount = players.size
+        val maxRows = tabListMaxRows
+        val columns = ceil(playerCount.toDouble() / maxRows.toDouble()).toInt()
+        val headSize = 10F
+        val outerPadding = 8F
+        val padding = 6F
+        val spacing = 4F
+        var maxNameWidth = 50F
+
+        players.forEach {
+            val fullName = mc.ingameGUI.tabList.getPlayerName(it)
+            val w = Fonts.fontRegular35.getStringWidth(fullName).toFloat()
+            if (w > maxNameWidth) maxNameWidth = w
+        }
+        val columnWidth = padding + headSize + spacing + maxNameWidth + spacing + 25F + padding
+        val playersWidth = columns * columnWidth
+
+        var maxHeaderW = 0f
+        header.forEach { maxHeaderW = max(maxHeaderW, Fonts.fontRegular35.getStringWidth(it).toFloat()) }
+        var maxFooterW = 0f
+        footer.forEach { maxFooterW = max(maxFooterW, Fonts.fontRegular35.getStringWidth(it).toFloat()) }
+
+        val targetWidth = max(playersWidth, max(maxHeaderW, maxFooterW) + padding * 2)
+
+        val lineH = Fonts.fontRegular35.FONT_HEIGHT + 2
+        val headerHeight = if (header.isNotEmpty()) header.size * lineH + 2 else 0
+        val footerHeight = if (footer.isNotEmpty()) footer.size * lineH + 2 else 0
+
+        val actualRows = if (columns == 1) playerCount else maxRows
+        val playersBlockHeight = actualRows * (headSize + spacing) - spacing
+
+        val targetHeight = outerPadding +
+                headerHeight.toFloat() +
+                (if (headerHeight > 0) 2F else 0F) +
+                playersBlockHeight +
+                (if (footerHeight > 0) 2F else 0F) +
+                footerHeight.toFloat() +
+                outerPadding
+
+        return Pair(targetWidth, targetHeight)
+    }
+
     private fun shouldShowBreakProgress(): Boolean {
         if (!breakProgressOnlyFuckerNuker) return true
         val fucker = fuckerModuleRef ?: return false
@@ -540,6 +587,20 @@ object Island : Module("Island", Category.RENDER) {
                 .sortedWith(compareBy({ it.gameProfile.name }))
         } else emptyList()
 
+        // Shared header/footer cache for tab list (used by all styles)
+        var headerLines: List<String> = emptyList()
+        var footerLines: List<String> = emptyList()
+        if (showTabList && playerList.isNotEmpty()) {
+            if (System.currentTimeMillis() - headerFooterCacheTime > 500) {
+                val (h, f) = getTabListHeaderFooter()
+                cachedHeader = h?.formattedText?.split("\n")
+                cachedFooter = f?.formattedText?.split("\n")
+                headerFooterCacheTime = System.currentTimeMillis()
+            }
+            headerLines = cachedHeader ?: emptyList()
+            footerLines = cachedFooter ?: emptyList()
+        }
+
         val lerpSpeed = 0.2f * (Minecraft.getDebugFPS() / 60f).coerceIn(0.5f, 2f)
         animatedBreakProgress += (breakProgressTarget - animatedBreakProgress) * lerpSpeed
         animatedBreakProgress = animatedBreakProgress.coerceIn(0F, 1F)
@@ -552,9 +613,6 @@ object Island : Module("Island", Category.RENDER) {
         var targetX = 0F
         var targetY = start_y
         var renderMode = "NONE"
-
-        var headerLines: List<String> = emptyList()
-        var footerLines: List<String> = emptyList()
 
         if (style == "legacy" && showLyricOnIsland && lyricDisplayMode == "Full" && MusicPlayer.currentLyricDisplay.isNotEmpty()) {
             renderMode = "LYRIC_FULL"
@@ -578,54 +636,9 @@ object Island : Module("Island", Category.RENDER) {
 
         } else if (style == "legacy" && showTabList && playerList.isNotEmpty()) {
             renderMode = "TABLIST"
-            if (System.currentTimeMillis() - headerFooterCacheTime > 500) {
-                val (h, f) = getTabListHeaderFooter()
-                cachedHeader = h?.formattedText?.split("\n")
-                cachedFooter = f?.formattedText?.split("\n")
-                headerFooterCacheTime = System.currentTimeMillis()
-            }
-            headerLines = cachedHeader ?: emptyList()
-            footerLines = cachedFooter ?: emptyList()
-
-            val playerCount = playerList.size
-            val maxRows = tabListMaxRows
-            val columns = ceil(playerCount.toDouble() / maxRows.toDouble()).toInt()
-            val headSize = 10F
-            val outerPadding = 8F
-            val padding = 6F
-            val spacing = 4F
-            var maxNameWidth = 50F
-
-            playerList.forEach { it ->
-                val fullName = mc.ingameGUI.tabList.getPlayerName(it)
-                val w = Fonts.fontRegular35.getStringWidth(fullName).toFloat()
-                if (w > maxNameWidth) maxNameWidth = w
-            }
-            val columnWidth = padding + headSize + spacing + maxNameWidth + spacing + 25F + padding
-            val playersWidth = columns * columnWidth
-
-            var maxHeaderW = 0f
-            headerLines.forEach { maxHeaderW = max(maxHeaderW, Fonts.fontRegular35.getStringWidth(it).toFloat()) }
-            var maxFooterW = 0f
-            footerLines.forEach { maxFooterW = max(maxFooterW, Fonts.fontRegular35.getStringWidth(it).toFloat()) }
-
-            targetWidth = max(playersWidth, max(maxHeaderW, maxFooterW) + padding * 2)
-
-            val lineH = Fonts.fontRegular35.FONT_HEIGHT + 2
-            val headerHeight = if(headerLines.isNotEmpty()) headerLines.size * lineH + 2 else 0
-            val footerHeight = if(footerLines.isNotEmpty()) footerLines.size * lineH + 2 else 0
-
-            val actualRows = if (columns == 1) playerCount else maxRows
-            val playersBlockHeight = actualRows * (headSize + spacing) - spacing
-
-            targetHeight = outerPadding +
-                    headerHeight.toFloat() +
-                    (if(headerHeight > 0) 2F else 0F) +
-                    playersBlockHeight +
-                    (if(footerHeight > 0) 2F else 0F) +
-                    footerHeight.toFloat() +
-                    outerPadding
-
+            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+            targetWidth = tw
+            targetHeight = th
             targetX = (width - targetWidth) / 2
             targetY = start_y
 
@@ -668,6 +681,8 @@ object Island : Module("Island", Category.RENDER) {
                     val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    val gappleOn = showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true
+                    val tabListOn = showTabList && playerList.isNotEmpty()
 
                     when {
                         isChestOpen && chestSlots.isNotEmpty() -> {
@@ -680,6 +695,20 @@ object Island : Module("Island", Category.RENDER) {
                             targetHeight = rows * slotSize + padding * 2
                             targetX = (width - targetWidth) / 2
                             targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        tabListOn -> {
+                            renderMode = "IOS_TABLIST"
+                            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+                            targetWidth = tw
+                            targetHeight = th
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        gappleOn -> {
+                            renderMode = "IOS_GAPPLE"
+                            targetWidth = 210f
+                            targetHeight = 34f
+                            targetX = (width - targetWidth) / 2
                         }
                         scaffoldOn -> {
                             renderMode = "IOS_SCAFFOLD"
@@ -725,6 +754,8 @@ object Island : Module("Island", Category.RENDER) {
                     val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    val gappleOn = showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true
+                    val tabListOn = showTabList && playerList.isNotEmpty()
 
                     when {
                         isChestOpen && chestSlots.isNotEmpty() -> {
@@ -737,6 +768,21 @@ object Island : Module("Island", Category.RENDER) {
                             targetHeight = rows * slotSize + padding * 2
                             targetX = (width - targetWidth) / 2
                             targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        tabListOn -> {
+                            renderMode = "BAR_TABLIST"
+                            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+                            targetWidth = tw
+                            targetHeight = th
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        gappleOn -> {
+                            renderMode = "BAR_GAPPLE"
+                            val pctStr = String.format("%.0f%%", animatedGappleProgress * 100f)
+                            targetWidth = maxOf(220f, Fonts.fontSemibold35.getStringWidth("Eating Gapple  $pctStr").toFloat() + 80f)
+                            targetHeight = 32f
+                            targetX = (width - targetWidth) / 2
                         }
                         toggleActive -> {
                             renderMode = "BAR_TOGGLE"
@@ -774,7 +820,33 @@ object Island : Module("Island", Category.RENDER) {
                     val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    val gappleOn = showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true
+                    val tabListOn = showTabList && playerList.isNotEmpty()
                     when {
+                        isChestOpen && chestSlots.isNotEmpty() -> {
+                            renderMode = "MINIMAL_CHEST"
+                            val columns = 9
+                            val rows = (chestSlots.size + 8) / 9
+                            val slotSize = 16f
+                            val padding = 8f
+                            targetWidth = columns * slotSize + padding * 2
+                            targetHeight = rows * slotSize + padding * 2
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        tabListOn -> {
+                            renderMode = "MINIMAL_TABLIST"
+                            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+                            targetWidth = tw
+                            targetHeight = th
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        gappleOn -> {
+                            renderMode = "MINIMAL_GAPPLE"
+                            targetWidth = 200f; targetHeight = 28f
+                            targetX = (width - targetWidth) / 2
+                        }
                         scaffoldOn -> {
                             renderMode = "MINIMAL_SCAFFOLD"
                             targetWidth = 200f; targetHeight = 28f
@@ -803,7 +875,33 @@ object Island : Module("Island", Category.RENDER) {
                     val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    val gappleOn = showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true
+                    val tabListOn = showTabList && playerList.isNotEmpty()
                     when {
+                        isChestOpen && chestSlots.isNotEmpty() -> {
+                            renderMode = "ELEGANT_CHEST"
+                            val columns = 9
+                            val rows = (chestSlots.size + 8) / 9
+                            val slotSize = 18f
+                            val padding = 10f
+                            targetWidth = columns * slotSize + padding * 2
+                            targetHeight = rows * slotSize + padding * 2
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        tabListOn -> {
+                            renderMode = "ELEGANT_TABLIST"
+                            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+                            targetWidth = tw
+                            targetHeight = th
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        gappleOn -> {
+                            renderMode = "ELEGANT_GAPPLE"
+                            targetWidth = 230f; targetHeight = 70f
+                            targetX = (width - targetWidth) / 2
+                        }
                         scaffoldOn -> {
                             renderMode = "ELEGANT_SCAFFOLD"
                             targetWidth = 230f; targetHeight = 70f
@@ -832,7 +930,33 @@ object Island : Module("Island", Category.RENDER) {
                     val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    val gappleOn = showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true
+                    val tabListOn = showTabList && playerList.isNotEmpty()
                     when {
+                        isChestOpen && chestSlots.isNotEmpty() -> {
+                            renderMode = "FRESH_CHEST"
+                            val columns = 9
+                            val rows = (chestSlots.size + 8) / 9
+                            val slotSize = 18f
+                            val padding = 10f
+                            targetWidth = columns * slotSize + padding * 2
+                            targetHeight = rows * slotSize + padding * 2
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        tabListOn -> {
+                            renderMode = "FRESH_TABLIST"
+                            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+                            targetWidth = tw
+                            targetHeight = th
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        gappleOn -> {
+                            renderMode = "FRESH_GAPPLE"
+                            targetWidth = 260f; targetHeight = 40f
+                            targetX = (width - targetWidth) / 2
+                        }
                         scaffoldOn -> {
                             renderMode = "FRESH_SCAFFOLD"
                             targetWidth = 260f; targetHeight = 40f
@@ -861,7 +985,33 @@ object Island : Module("Island", Category.RENDER) {
                     val scaffoldOn = isScaffold && (scaffoldModuleRef?.state == true || scaffold2ModuleRef?.state == true)
                     val musicOn = MusicPlayer.isCurrentlyPlaying && (MusicPlayer.currentLyricDisplay.isNotEmpty() || MusicPlayer.currentMusicName != "None")
                     val toggleActive = ModuleNotify && notifications.isNotEmpty()
+                    val gappleOn = showGappleProgress && animatedGappleProgress > 0.01f && gappleModuleRef?.state == true
+                    val tabListOn = showTabList && playerList.isNotEmpty()
                     when {
+                        isChestOpen && chestSlots.isNotEmpty() -> {
+                            renderMode = "CARD_CHEST"
+                            val columns = 9
+                            val rows = (chestSlots.size + 8) / 9
+                            val slotSize = 18f
+                            val padding = 10f
+                            targetWidth = columns * slotSize + padding * 2
+                            targetHeight = rows * slotSize + padding * 2
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        tabListOn -> {
+                            renderMode = "CARD_TABLIST"
+                            val (tw, th) = calcTabListSize(playerList, headerLines, footerLines)
+                            targetWidth = tw
+                            targetHeight = th
+                            targetX = (width - targetWidth) / 2
+                            targetY = start_y.coerceIn(5f, height - targetHeight - 5f)
+                        }
+                        gappleOn -> {
+                            renderMode = "CARD_GAPPLE"
+                            targetWidth = 240f; targetHeight = 62f
+                            targetX = (width - targetWidth) / 2
+                        }
                         scaffoldOn -> {
                             renderMode = "CARD_SCAFFOLD"
                             targetWidth = 240f; targetHeight = 62f
@@ -1046,27 +1196,43 @@ object Island : Module("Island", Category.RENDER) {
                 "IOS_SCAFFOLD" -> renderIosScaffold(drawX, drawY, drawW, drawH)
                 "IOS_MUSIC" -> renderIosMusic(drawX, drawY, drawW, drawH)
                 "IOS_CHEST" -> renderIosChest(drawX, drawY, drawW, drawH, chestSlots)
+                "IOS_GAPPLE" -> renderIosGapple(drawX, drawY, drawW, drawH)
+                "IOS_TABLIST" -> renderIosTabList(drawX, drawY, drawW, drawH, playerList, headerLines, footerLines)
                 "BAR_WATERMARK" -> renderBarWatermark(drawX, drawY, drawW, drawH)
                 "BAR_TOGGLE" -> renderBarToggle(drawX, drawY, drawW, drawH)
                 "BAR_SCAFFOLD" -> renderBarScaffold(drawX, drawY, drawW, drawH)
                 "BAR_MUSIC" -> renderBarMusic(drawX, drawY, drawW, drawH)
                 "BAR_CHEST" -> renderBarChest(drawX, drawY, drawW, drawH, chestSlots)
+                "BAR_GAPPLE" -> renderBarGapple(drawX, drawY, drawW, drawH)
+                "BAR_TABLIST" -> renderBarTabList(drawX, drawY, drawW, drawH, playerList, headerLines, footerLines)
                 "MINIMAL_WATERMARK" -> renderMinimalWatermark(drawX, drawY, drawW, drawH)
                 "MINIMAL_TOGGLE" -> renderMinimalToggle(drawX, drawY, drawW, drawH)
                 "MINIMAL_SCAFFOLD" -> renderMinimalScaffold(drawX, drawY, drawW, drawH)
                 "MINIMAL_MUSIC" -> renderMinimalMusic(drawX, drawY, drawW, drawH)
+                "MINIMAL_CHEST" -> renderMinimalChest(drawX, drawY, drawW, drawH, chestSlots)
+                "MINIMAL_GAPPLE" -> renderMinimalGapple(drawX, drawY, drawW, drawH)
+                "MINIMAL_TABLIST" -> renderMinimalTabList(drawX, drawY, drawW, drawH, playerList, headerLines, footerLines)
                 "ELEGANT_WATERMARK" -> renderElegantWatermark(drawX, drawY, drawW, drawH)
                 "ELEGANT_TOGGLE" -> renderElegantToggle(drawX, drawY, drawW, drawH)
                 "ELEGANT_SCAFFOLD" -> renderElegantScaffold(drawX, drawY, drawW, drawH)
                 "ELEGANT_MUSIC" -> renderElegantMusic(drawX, drawY, drawW, drawH)
+                "ELEGANT_CHEST" -> renderElegantChest(drawX, drawY, drawW, drawH, chestSlots)
+                "ELEGANT_GAPPLE" -> renderElegantGapple(drawX, drawY, drawW, drawH)
+                "ELEGANT_TABLIST" -> renderElegantTabList(drawX, drawY, drawW, drawH, playerList, headerLines, footerLines)
                 "FRESH_WATERMARK" -> renderFreshWatermark(drawX, drawY, drawW, drawH)
                 "FRESH_TOGGLE" -> renderFreshToggle(drawX, drawY, drawW, drawH)
                 "FRESH_SCAFFOLD" -> renderFreshScaffold(drawX, drawY, drawW, drawH)
                 "FRESH_MUSIC" -> renderFreshMusic(drawX, drawY, drawW, drawH)
+                "FRESH_CHEST" -> renderFreshChest(drawX, drawY, drawW, drawH, chestSlots)
+                "FRESH_GAPPLE" -> renderFreshGapple(drawX, drawY, drawW, drawH)
+                "FRESH_TABLIST" -> renderFreshTabList(drawX, drawY, drawW, drawH, playerList, headerLines, footerLines)
                 "CARD_WATERMARK" -> renderCardWatermark(drawX, drawY, drawW, drawH)
                 "CARD_TOGGLE" -> renderCardToggle(drawX, drawY, drawW, drawH)
                 "CARD_SCAFFOLD" -> renderCardScaffold(drawX, drawY, drawW, drawH)
                 "CARD_MUSIC" -> renderCardMusic(drawX, drawY, drawW, drawH)
+                "CARD_CHEST" -> renderCardChest(drawX, drawY, drawW, drawH, chestSlots)
+                "CARD_GAPPLE" -> renderCardGapple(drawX, drawY, drawW, drawH)
+                "CARD_TABLIST" -> renderCardTabList(drawX, drawY, drawW, drawH, playerList, headerLines, footerLines)
             }
         }
 
@@ -3895,6 +4061,393 @@ object Island : Module("Island", Category.RENDER) {
         if (progress > 0.001f) {
             drawRoundedRect(barX, barY, barX + barW * progress, barY + barH, Color(160, 200, 220).rgb, barH / 2)
         }
+    }
+
+    // ============================================================
+    // Shared chest items renderer - draws items in a grid with ripple effects.
+    // Used by all per-style chest renderers to avoid code duplication.
+    // ============================================================
+    private fun renderChestItemsCore(x: Float, y: Float, slots: List<Slot>, slotSize: Int, padding: Float) {
+        enableGUIStandardItemLighting()
+        try {
+            slots.forEachIndexed { index, slot ->
+                val stack = slot.stack
+                val col = index % 9
+                val row = index / 9
+                val itemX = (x + padding + col * slotSize).toInt()
+                val itemY = (y + padding + row * slotSize).toInt()
+
+                val prevStack = prevSlotItems[index]
+                if (prevSlotItems.containsKey(index)) {
+                    val isChanged = when {
+                        stack == null && prevStack == null -> false
+                        stack == null || prevStack == null -> true
+                        else -> !ItemStack.areItemStacksEqual(stack, prevStack) || stack.stackSize != prevStack.stackSize
+                    }
+                    if (isChanged) {
+                        slotRipples.add(SlotRipple((itemX + slotSize / 2).toFloat(), (itemY + slotSize / 2).toFloat(), System.currentTimeMillis()))
+                    }
+                }
+                prevSlotItems[index] = stack?.copy()
+
+                if (stack != null) {
+                    if (mc.currentScreen is GuiHudDesigner) glDisable(GL_DEPTH_TEST)
+                    mc.renderItem.renderItemAndEffectIntoGUI(stack, itemX, itemY)
+                    mc.renderItem.renderItemOverlays(mc.fontRendererObj, stack, itemX, itemY)
+                    if (mc.currentScreen is GuiHudDesigner) glEnable(GL_DEPTH_TEST)
+                }
+            }
+
+            disableStandardItemLighting()
+            GlStateManager.disableDepth()
+
+            val currentTime = System.currentTimeMillis()
+            val iterator = slotRipples.iterator()
+            while (iterator.hasNext()) {
+                val ripple = iterator.next()
+                val timeAlive = currentTime - ripple.startTime
+                if (timeAlive > 600L) {
+                    slotRipples.remove(ripple)
+                } else {
+                    val progress = timeAlive.toFloat() / 600f
+                    val ease = 1f - (1f - progress).pow(3)
+                    val radius = 16f * ease
+                    val alpha = (140 * (1f - progress)).toInt().coerceIn(0, 255)
+                    if (alpha > 0) drawCircle(ripple.x, ripple.y, radius, Color(255, 255, 255, alpha))
+                }
+            }
+            GlStateManager.enableDepth()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            disableStandardItemLighting()
+            GlStateManager.enableAlpha()
+            GlStateManager.disableBlend()
+            GlStateManager.disableLighting()
+        }
+    }
+
+    // ============================================================
+    // iOS style Gapple + TabList
+    // ============================================================
+
+    private fun renderIosGapple(x: Float, y: Float, w: Float, h: Float) {
+        val percentage = animatedGappleProgress.coerceIn(0f, 1f)
+        val padding = 12F
+        val centerY = y + h / 2f
+        var cx = x + padding
+
+        // Percentage text on the left
+        val pctStr = String.format("%.0f%%", percentage * 100f)
+        val textBaseY = centerY - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f
+        Fonts.fontSemibold35.drawString(pctStr, cx, textBaseY, Color.WHITE.rgb)
+        cx += Fonts.fontSemibold35.getStringWidth(pctStr).toFloat() + 10F
+
+        // 10-segment split bar on the right
+        val barW = (x + w - padding) - cx
+        val gap = 2F
+        val segCount = 10
+        val segW = ((barW - gap * (segCount - 1)) / segCount).coerceAtLeast(3F)
+        val barH = 8F
+        val barY = centerY - barH / 2f
+        val filledSegs = (percentage * segCount).toInt().coerceIn(0, segCount)
+        val themeColor = Color(gappleProgressTheme.red, gappleProgressTheme.green, gappleProgressTheme.blue, 230)
+        for (i in 0 until segCount) {
+            val sx = cx + i * (segW + gap)
+            val col = if (i < filledSegs) themeColor else Color(60, 60, 60, 200)
+            drawRoundedRect(sx, barY, sx + segW, barY + barH, col.rgb, 2F)
+        }
+    }
+
+    private fun renderIosTabList(x: Float, y: Float, w: Float, h: Float, players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>) {
+        renderTabListContent(x, y, w, h, players, header, footer)
+    }
+
+    // ============================================================
+    // Bar style Gapple + TabList
+    // ============================================================
+
+    private fun renderBarGapple(x: Float, y: Float, w: Float, h: Float) {
+        val percentage = animatedGappleProgress.coerceIn(0f, 1f)
+        val padX = 12f
+        val accentBarW = 3f
+        val barPadY = 6f
+        val font = Fonts.fontSemibold35
+        val cy = y + (h - 4f) / 2f
+
+        // Left accent vertical bar (gapple theme color)
+        val accentColor = Color(gappleProgressTheme.red, gappleProgressTheme.green, gappleProgressTheme.blue, 255)
+        drawRoundedRect(x + accentBarW, y + barPadY, x + accentBarW * 2, y + h - barPadY, accentColor.rgb, 1f)
+
+        // Content: "Eating Gapple" + percentage (centered)
+        val label = "Eating Gapple"
+        val pctStr = String.format("%.0f%%", percentage * 100f)
+        val labelW = font.getStringWidth(label).toFloat()
+        val pctW = font.getStringWidth(pctStr).toFloat()
+        val gap = 20f
+        val totalContentW = labelW + gap + pctW
+        val startX = x + (w - totalContentW) / 2f
+
+        font.drawString(label, startX, cy - font.FONT_HEIGHT / 2f + 1f, Color.WHITE.rgb)
+        font.drawString(pctStr, startX + labelW + gap, cy - font.FONT_HEIGHT / 2f + 1f, accentColor.rgb)
+
+        // Bottom 1px progress line
+        val barY = y + h - 3f
+        drawRoundedRect(x + 1f, barY, x + w - 1f, barY + 1.5f, Color(255, 255, 255, 30).rgb, 0.75f)
+        if (percentage > 0.001f) {
+            drawRoundedRect(x + 1f, barY, x + 1f + (w - 2f) * percentage, barY + 1.5f, accentColor.rgb, 0.75f)
+        }
+    }
+
+    private fun renderBarTabList(x: Float, y: Float, w: Float, h: Float, players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>) {
+        // Left accent vertical bar
+        val accentColor = Color(ButtonColor.red, ButtonColor.green, ButtonColor.blue, 255)
+        drawRoundedRect(x + 3f, y + 6f, x + 6f, y + h - 6f, accentColor.rgb, 1f)
+        // Bottom highlight line
+        val lineY = y + h - 2f
+        drawRoundedRect(x + 4f, lineY, x + w - 4f, lineY + 1f, Color(255, 255, 255, 30).rgb, 0.5f)
+        renderTabListContent(x, y, w, h, players, header, footer)
+    }
+
+    // ============================================================
+    // Minimal style Chest + Gapple + TabList
+    // ============================================================
+
+    private fun renderMinimalChest(x: Float, y: Float, w: Float, h: Float, slots: List<Slot>) {
+        val padding = 8f
+        val slotSize = 16
+        renderChestItemsCore(x, y, slots, slotSize, padding)
+    }
+
+    private fun renderMinimalGapple(x: Float, y: Float, w: Float, h: Float) {
+        val percentage = animatedGappleProgress.coerceIn(0f, 1f)
+        val pad = 14f
+        val themeColor = ClientThemesUtils.getColor()
+        val cy = y + (h - 5f) / 2f
+
+        // Centered text: "Eating · 50%"
+        val text = "Eating \u2022 " + String.format("%.0f%%", percentage * 100f)
+        val textW = Fonts.fontSemibold35.getStringWidth(text).toFloat()
+        Fonts.fontSemibold35.drawString(text, x + (w - textW) / 2f, cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f, Color.WHITE.rgb)
+
+        // Thin progress line at bottom
+        val barY = y + h - 4f
+        drawRoundedRect(x + pad, barY, x + w - pad, barY + 2f, Color(255, 255, 255, 30).rgb, 1f)
+        if (percentage > 0.001f) {
+            drawRoundedRect(x + pad, barY, x + pad + (w - pad * 2) * percentage, barY + 2f, themeColor.rgb, 1f)
+        }
+    }
+
+    private fun renderMinimalTabList(x: Float, y: Float, w: Float, h: Float, players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>) {
+        renderTabListContent(x, y, w, h, players, header, footer)
+    }
+
+    // ============================================================
+    // Elegant style Chest + Gapple + TabList
+    // ============================================================
+
+    private fun renderElegantChest(x: Float, y: Float, w: Float, h: Float, slots: List<Slot>) {
+        // Lavender tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        val padding = 10f
+        val slotSize = 18
+        // Subtle lavender slot backgrounds
+        for (i in slots.indices) {
+            val col = i % 9
+            val row = i / 9
+            val slotX = x + padding + col * slotSize
+            val slotY = y + padding + row * slotSize
+            drawRoundedRect(slotX + 1f, slotY + 1f, slotX + slotSize - 1f, slotY + slotSize - 1f,
+                Color(200, 184, 224, 25).rgb, 4f)
+        }
+        renderChestItemsCore(x, y, slots, slotSize, padding)
+    }
+
+    private fun renderElegantGapple(x: Float, y: Float, w: Float, h: Float) {
+        // Lavender tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        val percentage = animatedGappleProgress.coerceIn(0f, 1f)
+        val cx = x + w / 2f
+        val cy = y + h / 2f - 4f
+
+        // Circular progress ring (background)
+        val ringR = 22f
+        GlStateManager.pushMatrix()
+        GlStateManager.enableBlend()
+        GlStateManager.disableTexture2D()
+        GlStateManager.tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO)
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+        glLineWidth(4f)
+        glColor4f(0.5f, 0.5f, 0.55f, 0.4f)
+        glBegin(GL_LINE_LOOP)
+        for (i in 0..360 step 6) {
+            val theta = i * Math.PI / 180
+            glVertex2d(cx + ringR * cos(theta), cy + ringR * sin(theta))
+        }
+        glEnd()
+        val arcEnd = (percentage * 360).toInt()
+        if (arcEnd > 0) {
+            // Use gapple theme color for the arc
+            val tr = gappleProgressTheme.red / 255f
+            val tg = gappleProgressTheme.green / 255f
+            val tb = gappleProgressTheme.blue / 255f
+            glColor4f(tr, tg, tb, 1f)
+            glBegin(GL_LINE_STRIP)
+            for (i in 0..arcEnd step 6) {
+                val theta = (i - 90) * Math.PI / 180
+                glVertex2d(cx + ringR * cos(theta), cy + ringR * sin(theta))
+            }
+            glEnd()
+        }
+        glLineWidth(1f)
+        glDisable(GL_LINE_SMOOTH)
+        GlStateManager.enableTexture2D()
+        GlStateManager.disableBlend()
+        GlStateManager.popMatrix()
+
+        // Percentage in center
+        val pctStr = String.format("%.0f%%", percentage * 100f)
+        val pctW = Fonts.fontSemibold40.getStringWidth(pctStr).toFloat()
+        Fonts.fontSemibold40.drawString(pctStr, cx - pctW / 2f, cy - Fonts.fontSemibold40.FONT_HEIGHT / 2f + 1f, Color(220, 210, 240).rgb)
+
+        // Label below
+        val label = "Eating Gapple"
+        val labelW = Fonts.fontRegular35.getStringWidth(label).toFloat()
+        Fonts.fontRegular35.drawString(label, cx - labelW / 2f, y + h - 16f, Color(180, 170, 200).rgb)
+    }
+
+    private fun renderElegantTabList(x: Float, y: Float, w: Float, h: Float, players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>) {
+        drawRoundedRect(x, y, x + w, y + h, Color(200, 184, 224, 30).rgb, 14f)
+        // Vertical divider in center
+        val divX = x + w / 2f
+        drawRoundedRect(divX - 1f, y + 10f, divX + 1f, y + h - 10f, Color(128, 136, 144, 80).rgb, 1f)
+        renderTabListContent(x, y, w, h, players, header, footer)
+    }
+
+    // ============================================================
+    // Fresh style Chest + Gapple + TabList
+    // ============================================================
+
+    private fun renderFreshChest(x: Float, y: Float, w: Float, h: Float, slots: List<Slot>) {
+        // Mint tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, h / 2f)
+        val padding = 10f
+        val slotSize = 18
+        // Mint slot backgrounds
+        for (i in slots.indices) {
+            val col = i % 9
+            val row = i / 9
+            val slotX = x + padding + col * slotSize
+            val slotY = y + padding + row * slotSize
+            drawRoundedRect(slotX + 1f, slotY + 1f, slotX + slotSize - 1f, slotY + slotSize - 1f,
+                Color(127, 229, 197, 25).rgb, 4f)
+        }
+        renderChestItemsCore(x, y, slots, slotSize, padding)
+    }
+
+    private fun renderFreshGapple(x: Float, y: Float, w: Float, h: Float) {
+        // Mint tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, h / 2f)
+        val percentage = animatedGappleProgress.coerceIn(0f, 1f)
+        val pad = 14f
+        val cy = y + h / 2f
+        var cx = x + pad
+
+        // Gapple icon
+        val iconSz = 18
+        try {
+            drawImage(getGappleResource(), cx.toInt(), (cy - iconSz / 2).toInt(), iconSz, iconSz, Color(127, 229, 197))
+        } catch (e: Exception) {}
+        cx += iconSz + 8f
+
+        // Label + percentage
+        val label = "Eating " + String.format("%.0f%%", percentage * 100f)
+        Fonts.fontSemibold35.drawString(label, cx, cy - Fonts.fontSemibold35.FONT_HEIGHT / 2f + 1f, Color.WHITE.rgb)
+        cx += Fonts.fontSemibold35.getStringWidth(label).toFloat() + 12f
+
+        // Segmented fresh bar on the right
+        val barAreaX = x + w / 2f + 10f
+        val barAreaW = (x + w - pad - barAreaX).coerceAtLeast(40f)
+        val segCount = 12
+        val gap = 2f
+        val segW = ((barAreaW - gap * (segCount - 1)) / segCount).coerceAtLeast(3f)
+        val barH = 10f
+        val barY = cy - barH / 2f
+        val filledSegs = (percentage * segCount).toInt().coerceIn(0, segCount)
+        for (i in 0 until segCount) {
+            val sx = barAreaX + i * (segW + gap)
+            val col = if (i < filledSegs) Color(127, 229, 197, 230) else Color(60, 80, 75, 180)
+            drawRoundedRect(sx, barY, sx + segW, barY + barH, col.rgb, 2f)
+        }
+    }
+
+    private fun renderFreshTabList(x: Float, y: Float, w: Float, h: Float, players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>) {
+        drawRoundedRect(x, y, x + w, y + h, Color(127, 229, 197, 30).rgb, 16f)
+        renderTabListContent(x, y, w, h, players, header, footer)
+    }
+
+    // ============================================================
+    // Card style Chest + Gapple + TabList
+    // ============================================================
+
+    private fun renderCardChest(x: Float, y: Float, w: Float, h: Float, slots: List<Slot>) {
+        // Blue-gray tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        val padding = 10f
+        val slotSize = 18
+        // Blue-gray slot backgrounds
+        for (i in slots.indices) {
+            val col = i % 9
+            val row = i / 9
+            val slotX = x + padding + col * slotSize
+            val slotY = y + padding + row * slotSize
+            drawRoundedRect(slotX + 1f, slotY + 1f, slotX + slotSize - 1f, slotY + slotSize - 1f,
+                Color(107, 123, 140, 40).rgb, 4f)
+        }
+        renderChestItemsCore(x, y, slots, slotSize, padding)
+    }
+
+    private fun renderCardGapple(x: Float, y: Float, w: Float, h: Float) {
+        // Blue-gray tint overlay
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        val percentage = animatedGappleProgress.coerceIn(0f, 1f)
+        val pad = 14f
+        val iconSz = 30f
+        val iconX = x + pad
+        val iconY = y + (h - iconSz) / 2f - 4f
+
+        // Gapple icon square
+        drawRoundedRect(iconX, iconY, iconX + iconSz, iconY + iconSz, Color(gappleProgressTheme.red, gappleProgressTheme.green, gappleProgressTheme.blue, 100).rgb, 8f)
+        val imgSz = 20
+        try {
+            drawImage(getGappleResource(), (iconX + (iconSz - imgSz) / 2).toInt(), (iconY + (iconSz - imgSz) / 2).toInt(), imgSz, imgSz, Color(255, 255, 255))
+        } catch (e: Exception) {}
+
+        // Two-line text
+        val textX = iconX + iconSz + 12f
+        val line1Y = y + 10f
+        val line2Y = line1Y + Fonts.fontSemibold40.FONT_HEIGHT + 2f
+
+        Fonts.fontSemibold40.drawString("Eating Gapple", textX, line1Y, Color(220, 230, 245).rgb)
+        val pctStr = String.format("%.1f%%", percentage * 100f)
+        Fonts.fontRegular35.drawString(pctStr, textX, line2Y, Color(160, 180, 200).rgb)
+
+        // Progress bar at bottom
+        val barH = 6f
+        val barY = y + h - barH - 8f
+        val barX = x + pad
+        val barW = w - pad * 2
+        drawRoundedRect(barX, barY, barX + barW, barY + barH, Color(107, 123, 140, 80).rgb, barH / 2)
+        if (percentage > 0.001f) {
+            drawRoundedRect(barX, barY, barX + barW * percentage, barY + barH,
+                Color(gappleProgressTheme.red, gappleProgressTheme.green, gappleProgressTheme.blue).rgb, barH / 2)
+        }
+    }
+
+    private fun renderCardTabList(x: Float, y: Float, w: Float, h: Float, players: List<NetworkPlayerInfo>, header: List<String>, footer: List<String>) {
+        drawRoundedRect(x, y, x + w, y + h, Color(107, 123, 140, 35).rgb, 12f)
+        renderTabListContent(x, y, w, h, players, header, footer)
     }
 
 }

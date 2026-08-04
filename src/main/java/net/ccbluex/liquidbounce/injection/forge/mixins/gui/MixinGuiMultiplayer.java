@@ -4,6 +4,7 @@
  */
 package net.ccbluex.liquidbounce.injection.forge.mixins.gui;
 
+import de.florianmichael.viamcp.gui.GuiProtocolSelector;
 import kotlin.collections.CollectionsKt;
 import net.ccbluex.liquidbounce.features.special.BungeeCordSpoof;
 import net.ccbluex.liquidbounce.file.FileManager;
@@ -35,12 +36,12 @@ public abstract class MixinGuiMultiplayer extends MixinGuiScreen {
         int yPosition = 8;
 
         if (button != null) {
-            increase += 105;
             yPosition = Math.min(button.yPosition, 10);
         }
 
-        buttonList.add(new GuiButton(997, 5 + increase, yPosition, 45, 20, "Fixes"));
-        buttonList.add(bungeeCordSpoofButton = new GuiButton(998, 55 + increase, yPosition, 98, 20, "BungeeCord Spoof: " + (BungeeCordSpoof.INSTANCE.getEnabled() ? "On" : "Off")));
+        buttonList.add(new GuiButton(997, 5, yPosition, 45, 20, "Fixes"));
+        buttonList.add(bungeeCordSpoofButton = new GuiButton(998, 55, yPosition, 98, 20, "BungeeCord Spoof: " + (BungeeCordSpoof.INSTANCE.getEnabled() ? "On" : "Off")));
+        buttonList.add(new GuiButton(699, 158, yPosition, 60, 20, "Version"));
         buttonList.add(new GuiButton(996, width - 120, yPosition, 62, 20, LanguageKt.translationMenu("altManager")));
         buttonList.add(new GuiButton(999, width - 52, yPosition, 46, 20, "Tools"));
     }
@@ -48,6 +49,9 @@ public abstract class MixinGuiMultiplayer extends MixinGuiScreen {
     @Inject(method = "actionPerformed", at = @At("HEAD"))
     private void actionPerformed(GuiButton button, CallbackInfo callbackInfo) throws IOException {
         switch (button.id) {
+            case 699:
+                mc.displayGuiScreen(new GuiProtocolSelector((GuiScreen) (Object) this));
+                break;
             case 996:
                 mc.displayGuiScreen(new GuiAltManager((GuiScreen) (Object) this));
                 break;

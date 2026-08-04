@@ -62,8 +62,12 @@ import static net.ccbluex.liquidbounce.utils.client.MinecraftInstance.mc;
 @SideOnly(Side.CLIENT)
 public abstract class MixinMinecraft {
 
-    @Shadow
-    public GuiScreen currentScreen;
+    // currentScreen is accessed via MinecraftInstance.mc because the @Shadow field
+    // name uses MCP mapping (currentScreen) but the runtime class is named in
+    // searge/SRG (field_71462_r) under mappings = "stable_22", which makes
+    // Mixin's @Shadow unable to locate the field at startup.
+    // @Shadow
+    // public GuiScreen currentScreen;
 
     @Shadow
     public boolean skipRenderWorld;
@@ -127,7 +131,10 @@ public abstract class MixinMinecraft {
     private void waitForLock(CallbackInfo ci) {
         long end = System.currentTimeMillis() + 20000;
 
-        while (end < System.currentTimeMillis() && SplashProgressLock.INSTANCE.isAnimationRunning()) {
+        // 原条件 end < System.currentTimeMillis() 写反了——前 20 秒一直为 false 不进循环，
+        // 20 秒后变 true 又因 isAnimationRunning 默认为 true 而永远 wait，造成死锁。
+        // 改为 currentTime < end：在 20 秒窗口内等待 splash 动画结束。
+        while (System.currentTimeMillis() < end && SplashProgressLock.INSTANCE.isAnimationRunning()) {
             synchronized (SplashProgressLock.INSTANCE) {
                 try {
                     SplashProgressLock.INSTANCE.wait(10000);
@@ -147,21 +154,21 @@ public abstract class MixinMinecraft {
 
     @Inject(method = "displayGuiScreen", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;currentScreen:Lnet/minecraft/client/gui/GuiScreen;", shift = At.Shift.AFTER))
     private void handleDisplayGuiScreen(CallbackInfo callbackInfo) {
-        if (currentScreen instanceof net.minecraft.client.gui.GuiMainMenu || (currentScreen != null && currentScreen.getClass().getName().startsWith("net.labymod") && currentScreen.getClass().getSimpleName().equals("ModGuiMainMenu"))) {
+        if (mc.currentScreen instanceof net.minecraft.client.gui.GuiMainMenu || (mc.currentScreen != null && mc.currentScreen.getClass().getName().startsWith("net.labymod") && mc.currentScreen.getClass().getSimpleName().equals("ModGuiMainMenu"))) {
             String style = ClientConfiguration.INSTANCE.getMainMenuStyle();
             Object screen = MainMenuStyles.createScreen(style);
             if (screen instanceof net.minecraft.client.gui.GuiScreen) {
-                currentScreen = (net.minecraft.client.gui.GuiScreen) screen;
+                mc.currentScreen = (net.minecraft.client.gui.GuiScreen) screen;
             } else {
-                currentScreen = new GuiMainMenu();
+                mc.currentScreen = new GuiMainMenu();
             }
 
             ScaledResolution scaledResolution = new ScaledResolution(mc);
-            currentScreen.setWorldAndResolution(mc, scaledResolution.getScaledWidth(), scaledResolution.getScaledHeight());
+            mc.currentScreen.setWorldAndResolution(mc, scaledResolution.getScaledWidth(), scaledResolution.getScaledHeight());
             skipRenderWorld = false;
         }
 
-        EventManager.INSTANCE.call(new ScreenEvent(currentScreen));
+        EventManager.INSTANCE.call(new ScreenEvent(mc.currentScreen));
     }
 
     @Unique
@@ -201,7 +208,7 @@ public abstract class MixinMinecraft {
     private void onKey(CallbackInfo callbackInfo) {
         // 在 dispatchKeypresses 之后触发 PostInputEvent (模拟按键的最佳时机)
         EventManager.INSTANCE.call(PostInputEvent.INSTANCE);
-        if (Keyboard.getEventKeyState() && currentScreen == null)
+        if (Keyboard.getEventKeyState() && mc.currentScreen == null)
             EventManager.INSTANCE.call(new KeyEvent(Keyboard.getEventKey() == 0 ? Keyboard.getEventCharacter() + 256 : Keyboard.getEventKey()));
     }
 

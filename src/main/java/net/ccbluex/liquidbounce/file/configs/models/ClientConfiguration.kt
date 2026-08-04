@@ -14,8 +14,6 @@ object ClientConfiguration : Configurable("ClientConfiguration"), MinecraftInsta
     var customBackground by boolean("CustomBackground", false)
     var particles by boolean("Particles", false)
     var mainMenuStyle by text("MainMenuStyle", "Default")
-    var defaultMenuBackgroundIndex by int("DefaultMenuBackgroundIndex", 6, 0..11)
-    var customMenuBackgroundIndex by int("CustomMenuBackgroundIndex", 6, 0..11)
     var customMenuBackgroundImageIndex by int("CustomMenuBackgroundImageIndex", 0, 0..20)
     var splashBackground by choices("SplashBackground", arrayOf("splash", "qcf", "cat", "miku"), "splash")
     var stylisedAlts by boolean("StylisedAlts", true)

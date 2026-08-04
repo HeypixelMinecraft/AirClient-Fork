@@ -275,6 +275,9 @@ public abstract class MixinNetHandlerPlayClient {
 
         // Save the server's requested rotation before it resets the rotations
         module.setSavedRotation(PlayerExtensionKt.getRotation(Minecraft.getMinecraft().thePlayer));
+
+        // Notify listeners (e.g. ViaFixes PostFix) that the server teleported the player
+        EventManager.INSTANCE.call(net.ccbluex.liquidbounce.event.TeleportEvent.INSTANCE);
     }
 
     @Redirect(method = "handlePlayerPosLook", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/NetworkManager;sendPacket(Lnet/minecraft/network/Packet;)V"))

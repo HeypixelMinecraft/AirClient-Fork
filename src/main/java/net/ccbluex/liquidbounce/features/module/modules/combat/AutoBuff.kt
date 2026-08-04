@@ -10,6 +10,7 @@ import net.ccbluex.liquidbounce.event.UpdateEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
+import net.ccbluex.liquidbounce.features.module.modules.world.scaffolds.Scaffold
 import net.ccbluex.liquidbounce.ui.font.Fonts
 import net.ccbluex.liquidbounce.utils.extensions.tryJump
 import net.ccbluex.liquidbounce.utils.inventory.InventoryUtils
@@ -48,6 +49,7 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
     private val groundDistance by float("GroundDistance", 2F, 0F..5F)
     private val throwMode by choices("ThrowMode", arrayOf("Jump", "Port", "None"), "Jump") { true }
     private val showTimer by boolean("ShowTimer", true)
+    private val hotbarOnly by boolean("HotbarOnly", false)
 
     // Which buff types to look for
     private val strengthPotion by boolean("Strength", true)
@@ -174,6 +176,9 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
         // Don't search for new potions while drinking or throwing
         if (drinking || throwing) return@handler
 
+        // Scaffold 启用时停止工作
+        if (Scaffold.state) return@handler
+
         if (!msTimer.hasTimePassed(delay) || mc.playerController.isInCreativeMode)
             return@handler
 
@@ -253,6 +258,7 @@ object AutoBuff : Module("AutoBuff", Category.COMBAT) {
         }
 
         // Find buff potion in inventory (9-35) and move to hotbar
+        if (hotbarOnly) return@handler
         val potionInInventory = findBuffPotion(9, 35) ?: return@handler
 
         val targetSlot = if (InventoryUtils.hasSpaceInHotbar()) {

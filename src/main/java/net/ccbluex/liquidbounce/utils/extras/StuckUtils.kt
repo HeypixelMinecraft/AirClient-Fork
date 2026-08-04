@@ -11,6 +11,7 @@ object StuckUtils : Listenable, MinecraftInstance {
     var moveTicks = 0
     var stuck = false
     var c03s = 0
+    var skipTicks = 0
 
     fun stuck() {
         stuck = true

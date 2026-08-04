@@ -4,6 +4,8 @@
  */
 package net.ccbluex.liquidbounce.injection.forge.mixins.entity;
 
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
+import de.florianmichael.vialoadingbase.ViaLoadingBase;
 import net.ccbluex.liquidbounce.event.EventManager;
 import net.ccbluex.liquidbounce.event.RotationSetEvent;
 import net.ccbluex.liquidbounce.event.StrafeEvent;
@@ -41,6 +43,9 @@ import static net.ccbluex.liquidbounce.utils.client.MinecraftInstance.mc;
 public abstract class MixinEntity implements IMixinEntity {
 
     @Shadow
+    public abstract void moveFlying(float strafe, float forward, float friction);
+
+    @Shadow
     public double posX;
 
     @Shadow
@@ -54,6 +59,8 @@ public abstract class MixinEntity implements IMixinEntity {
     private double lerpX;
     private double lerpY;
     private double lerpZ;
+
+    private boolean handlingMoveFlying = false;
 
     public double getTrueX() {
         return trueX;
@@ -236,8 +243,15 @@ public abstract class MixinEntity implements IMixinEntity {
     private void getCollisionBorderSize(final CallbackInfoReturnable<Float> callbackInfoReturnable) {
         final HitBox hitBox = HitBox.INSTANCE;
 
-        if (hitBox.handleEvents())
+        if (hitBox.handleEvents()) {
             callbackInfoReturnable.setReturnValue(0.1F + hitBox.determineSize((Entity) (Object) this));
+        } else {
+            if (ViaLoadingBase.getInstance().getTargetVersion().newerThanOrEqualTo(ProtocolVersion.v1_12_2)) {
+                callbackInfoReturnable.setReturnValue(0F);
+            } else {
+                callbackInfoReturnable.setReturnValue(0.1F);
+            }
+        }
     }
 
     @Redirect(method = "setAngles", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/MathHelper;clamp_float(FFF)F"))
@@ -250,10 +264,25 @@ public abstract class MixinEntity implements IMixinEntity {
         //noinspection ConstantConditions
         if ((Object) this != mc.thePlayer) return;
 
+        // Recursion guard: when we re-invoke moveFlying with an overridden friction,
+        // skip the StrafeEvent dispatch so the original moveFlying body actually runs.
+        if (handlingMoveFlying) return;
+
         final StrafeEvent strafeEvent = new StrafeEvent(strafe, forward, friction);
         EventManager.INSTANCE.call(strafeEvent);
 
-        if (strafeEvent.isCancelled()) callbackInfo.cancel();
+        if (strafeEvent.isCancelled()) {
+            callbackInfo.cancel();
+        } else if (strafeEvent.getFriction() != friction) {
+            // A handler overrode the friction value; re-invoke moveFlying with the new friction.
+            callbackInfo.cancel();
+            handlingMoveFlying = true;
+            try {
+                moveFlying(strafeEvent.getStrafe(), strafeEvent.getForward(), strafeEvent.getFriction());
+            } finally {
+                handlingMoveFlying = false;
+            }
+        }
     }
 
     @Inject(method = "isInWater", at = @At("HEAD"), cancellable = true)

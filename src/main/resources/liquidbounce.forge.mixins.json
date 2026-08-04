@@ -9,6 +9,7 @@
     "block.MixinVec3i",
     "block.MixinBlockAnvil",
     "block.MixinBlockLadder",
+    "block.MixinBlockFarmland",
     "block.MixinBlockLiquid",
     "block.MixinBlockModelRenderer",
     "block.MixinBlockSoulSand",
@@ -47,6 +48,7 @@
     "gui.MixinGuiSpectator",
     "gui.MixinServerSelectionList",
     "item.MixinItem",
+    "item.MixinItemBlock",
     "item.MixinItemRenderer",
     "item.MixinMixinItemStack",
     "network.MixinNetHandlerPlayClient",
@@ -79,6 +81,7 @@
     "world.MixinWorldClient"
   ],
   "client": [
+    "block.MixinBlockLilyPad",
     "block.MixinBlockSlime",
     "gui.MixinGuiAchievement",
     "gui.MixinGuiContainer",

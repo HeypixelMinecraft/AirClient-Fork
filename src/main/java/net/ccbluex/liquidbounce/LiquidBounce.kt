@@ -5,6 +5,7 @@
  */
 package net.ccbluex.liquidbounce
 
+import de.florianmichael.viamcp.ViaMCP
 import com.formdev.flatlaf.themes.FlatMacLightLaf
 import kotlinx.coroutines.launch
 import net.ccbluex.liquidbounce.api.ClientUpdate
@@ -20,6 +21,8 @@ import net.ccbluex.liquidbounce.features.module.ModuleManager
 import net.ccbluex.liquidbounce.features.module.ModuleManager.registerModules
 import net.ccbluex.liquidbounce.features.special.BungeeCordSpoof
 import net.ccbluex.liquidbounce.features.special.ClientFixes
+import net.ccbluex.liquidbounce.features.special.ViaFixes
+import net.ccbluex.liquidbounce.features.special.ViaPingSpoof
 import net.ccbluex.liquidbounce.file.FileManager
 import net.ccbluex.liquidbounce.file.FileManager.loadAllConfigs
 import net.ccbluex.liquidbounce.file.FileManager.saveAllConfigs
@@ -54,7 +57,7 @@ import net.ccbluex.liquidbounce.utils.movement.MovementUtils
 import net.ccbluex.liquidbounce.utils.movement.TimerBalanceUtils
 import net.ccbluex.liquidbounce.utils.render.MiniMapRegister
 import net.ccbluex.liquidbounce.utils.render.shader.Background
-import net.ccbluex.liquidbounce.utils.render.shader.BuiltinShaderBackground
+import net.ccbluex.liquidbounce.utils.client.PlatformUtils
 import net.ccbluex.liquidbounce.utils.rotation.RotationUtils
 import net.ccbluex.liquidbounce.utils.timing.TickedActions
 import net.ccbluex.liquidbounce.utils.timing.WaitTickUtils
@@ -95,8 +98,8 @@ object LiquidBounce {
             LOGGER.warn("Failed to load version properties: ${e.message}")
         }
         
-        clientVersionText = props.getProperty("version", "b1.6")
-        clientVersionNumber = 160
+        clientVersionText = props.getProperty("version", "2.0")
+        clientVersionNumber = 200
         clientCommit = props.getProperty("commit", "unknown")
         clientBranch = props.getProperty("branch", "unknown")
     }
@@ -125,23 +128,6 @@ object LiquidBounce {
 
     // Menu Background
     var background: Background? = null
-    var defaultMenuBackground: BuiltinShaderBackground? = null
-    var customMenuBackground: BuiltinShaderBackground? = null
-
-    fun getCurrentBackground(): Background? {
-        val customBgFile = FileManager.backgroundImageFile
-        val customShaderFile = FileManager.backgroundShaderFile
-        
-        if (customBgFile.exists() || customShaderFile.exists()) {
-            return background
-        }
-        
-        return if (ClientConfiguration.mainMenuStyle == "Custom") {
-            customMenuBackground ?: Background.fromBuiltin(ClientConfiguration.customMenuBackgroundIndex).also { customMenuBackground = it }
-        } else {
-            defaultMenuBackground ?: Background.fromBuiltin(ClientConfiguration.defaultMenuBackgroundIndex).also { defaultMenuBackground = it }
-        }
-    }
 
 
     /**
@@ -188,6 +174,10 @@ object LiquidBounce {
 
         LOGGER.info("Starting $CLIENT_NAME $clientVersionText $clientCommit, by $CLIENT_AUTHOR")
 
+        // Initialize ViaMCP (ViaVersion support)
+        ViaMCP.create()
+        ViaMCP.INSTANCE.initAsyncSlider()
+
         try {
             // Load client fonts
             Fonts.loadFonts()
@@ -195,6 +185,8 @@ object LiquidBounce {
             // Register listeners
             RotationUtils
             ClientFixes
+            ViaFixes
+            ViaPingSpoof
             BungeeCordSpoof
             CapeService
             InventoryUtils
@@ -278,11 +270,20 @@ object LiquidBounce {
                 LOGGER.info("Successfully loaded ${it.size} cape carriers.")
             }
 
-            // Load background
-            FileManager.loadBackground()
+            // Load background - 跳过 Android，避免在 OptiFine/gl4es 触发 SIGSEGV 的关键窗口里
+            // 创建动态纹理（DynamicTexture）。Android 端默认显示 MC 原版背景。
+            if (!PlatformUtils.isAndroid) {
+                FileManager.loadBackground()
+            } else {
+                LOGGER.info("[Platform] Android detected: skipping background preload to avoid GL race with OptiFine texture atlas creation.")
+            }
 
-            // Start Web ClickGUI server
-            WebClickGuiServer.start()
+            // Start Web ClickGUI server - 跳过 Android，缺少可用回环，启动只会失败
+            if (!PlatformUtils.isAndroid) {
+                WebClickGuiServer.start()
+            } else {
+                LOGGER.info("[Platform] Android detected: skipping WebClickGuiServer start.")
+            }
         } catch (e: Exception) {
             LOGGER.error("Failed to start client: ${e.message}")
             e.showErrorPopup()

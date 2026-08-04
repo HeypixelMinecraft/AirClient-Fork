@@ -23,8 +23,6 @@ import net.ccbluex.liquidbounce.ui.client.mainmenu.MainMenuStyles
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedBorderRect
 import net.ccbluex.liquidbounce.utils.timing.MSTimer
 import net.ccbluex.liquidbounce.utils.ui.AbstractScreen
-import net.ccbluex.liquidbounce.utils.render.shader.Background
-import net.ccbluex.liquidbounce.utils.render.shader.BuiltinShaderBackground
 import net.minecraft.client.gui.GuiButton
 import net.minecraft.client.gui.GuiMultiplayer
 import net.minecraft.client.gui.GuiOptions
@@ -202,7 +200,7 @@ class GuiMainMenu : AbstractScreen() {
             2f, bgBtnColor, bgBtnColor, 2f
         )
         
-        val currentBgName = Background.BUILTIN_BACKGROUND_NAMES[ClientConfiguration.defaultMenuBackgroundIndex] ?: "None Grid"
+        val currentBgName = MainMenuStyles.backgroundDisplayName(ClientConfiguration.customMenuBackgroundImageIndex)
         Fonts.fontSemibold35.drawCenteredString(
             currentBgName, 
             bgBtnX + bgBtnWidth / 2f, 
@@ -267,10 +265,8 @@ class GuiMainMenu : AbstractScreen() {
                            mouseY >= bgBtnY && mouseY <= bgBtnY + bgBtnHeight
         
         if (isHoveringBg && mouseButton == 0 && switchButtonTimer.hasTimePassed(200)) {
-            val currentIndex = ClientConfiguration.defaultMenuBackgroundIndex
-            val newIndex = (currentIndex + 1) % Background.BUILTIN_BACKGROUNDS.size
-            ClientConfiguration.defaultMenuBackgroundIndex = newIndex
-            LiquidBounce.defaultMenuBackground = Background.fromBuiltin(newIndex)
+            ClientConfiguration.customMenuBackgroundImageIndex =
+                MainMenuStyles.backgroundImageIndex(ClientConfiguration.customMenuBackgroundImageIndex + 1)
             FileManager.saveConfig(valuesConfig)
             switchButtonTimer.reset()
             return

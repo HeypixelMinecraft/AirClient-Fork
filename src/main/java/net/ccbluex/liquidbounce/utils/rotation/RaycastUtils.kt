@@ -21,6 +21,7 @@ import net.minecraft.entity.player.EntityPlayer
 import net.minecraft.entity.projectile.EntityLargeFireball
 import net.minecraft.util.AxisAlignedBB
 import net.minecraft.util.BlockPos
+import net.minecraft.util.EnumFacing
 import net.minecraft.util.MovingObjectPosition
 import net.minecraft.util.Vec3
 import java.util.*
@@ -85,6 +86,32 @@ object RaycastUtils : MinecraftInstance {
         }
 
         return pointedEntity
+    }
+
+    fun overBlock(rotation: Rotation, facing: EnumFacing, blockPos: BlockPos, hitBox: Boolean = false): Boolean {
+        val renderViewEntity = mc.renderViewEntity ?: return false
+        val world = mc.theWorld ?: return false
+
+        val eyes = renderViewEntity.eyes
+        val look = RotationUtils.getVectorForRotation(rotation)
+        val reach = 6.0
+        val end = eyes.addVector(look.xCoord * reach, look.yCoord * reach, look.zCoord * reach)
+
+        val blockBox = if (hitBox) {
+            world.getBlockState(blockPos).block.getCollisionBoundingBox(world, blockPos, world.getBlockState(blockPos))
+        } else {
+            val block = world.getBlockState(blockPos).block
+            val min = Vec3(blockPos.x.toDouble(), blockPos.y.toDouble(), blockPos.z.toDouble())
+            val max = Vec3(
+                blockPos.x + 1.0 + block.blockBoundsMaxX - block.blockBoundsMinX,
+                blockPos.y + 1.0 + block.blockBoundsMaxY - block.blockBoundsMinY,
+                blockPos.z + 1.0 + block.blockBoundsMaxZ - block.blockBoundsMinZ
+            )
+            AxisAlignedBB(min.xCoord, min.yCoord, min.zCoord, max.xCoord, max.yCoord, max.zCoord)
+        } ?: return false
+
+        val mop = blockBox.calculateIntercept(eyes, end) ?: return false
+        return mop.sideHit == facing
     }
 
     /**

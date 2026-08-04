@@ -571,7 +571,7 @@ object Backtrack : Module("Backtrack", Category.COMBAT) {
         val prevPos = entity.prevPos
 
         // This will loop through the backtrack data. We are using reversed() to loop through the data from the newest to the oldest.
-        for ((x, y, z, _) in backtrackDataArray.reversed()) {
+        for ((x, y, z, _) in backtrackDataArray.asReversed()) {
             entity.setPosAndPrevPos(Vec3(x, y, z))
 
             if (action()) break

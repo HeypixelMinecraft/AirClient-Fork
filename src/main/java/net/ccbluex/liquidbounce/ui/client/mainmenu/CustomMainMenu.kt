@@ -20,8 +20,6 @@ import net.ccbluex.liquidbounce.utils.render.animation.Animation
 import net.ccbluex.liquidbounce.utils.render.animation.AnimationType
 import net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil
 import net.ccbluex.liquidbounce.utils.ui.AbstractScreen
-import net.ccbluex.liquidbounce.utils.render.shader.Background
-import net.ccbluex.liquidbounce.utils.render.shader.BuiltinShaderBackground
 import net.minecraft.client.gui.GuiButton
 import net.minecraft.client.gui.GuiMultiplayer
 import net.minecraft.client.gui.GuiOptions
@@ -74,12 +72,7 @@ class CustomMainMenu : AbstractScreen() {
         height = sr.scaledHeight
         
         drawDefaultBackground()
-        
-        RenderUtils.drawImage(
-            ResourceLocation("airclient/miku.png"),
-            0, 0, width, height
-        )
-        
+
         // Render particles
         particleEngine?.render()
         
@@ -175,7 +168,7 @@ class CustomMainMenu : AbstractScreen() {
         
         RenderUtils.drawRoundedRectInt(bgBtnX, bgBtnY, bgBtnX + bgBtnWidth, bgBtnY + bgBtnHeight, bgBtnColor.rgb, 3f)
         
-        val currentBgName = Background.BUILTIN_BACKGROUND_NAMES[ClientConfiguration.customMenuBackgroundIndex] ?: "Aurora"
+        val currentBgName = MainMenuStyles.backgroundDisplayName(ClientConfiguration.customMenuBackgroundImageIndex)
         Fonts.fontSemibold35.drawCenteredString(
             currentBgName, 
             bgBtnX + bgBtnWidth / 2f, 
@@ -215,10 +208,8 @@ class CustomMainMenu : AbstractScreen() {
                            mouseY >= bgBtnY && mouseY <= bgBtnY + bgBtnHeight
         
         if (isHoveringBg && mouseButton == 0 && timer.hasTimePassed(200)) {
-            val currentIndex = ClientConfiguration.customMenuBackgroundIndex
-            val newIndex = (currentIndex + 1) % Background.BUILTIN_BACKGROUNDS.size
-            ClientConfiguration.customMenuBackgroundIndex = newIndex
-            LiquidBounce.customMenuBackground = Background.fromBuiltin(newIndex)
+            ClientConfiguration.customMenuBackgroundImageIndex =
+                MainMenuStyles.backgroundImageIndex(ClientConfiguration.customMenuBackgroundImageIndex + 1)
             FileManager.saveConfig(valuesConfig)
             timer.reset()
             return

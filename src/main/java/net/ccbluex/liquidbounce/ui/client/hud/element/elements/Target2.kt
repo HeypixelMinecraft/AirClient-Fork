@@ -83,6 +83,7 @@ class Target2 : Element("Target2") {
     val counter2 = intArrayOf(80)
 
     private var mainTarget: EntityPlayer? = null
+    private var renderTarget: EntityPlayer? = null
 
     private fun spring(current: Float, target: Float, velocity: Float, tension: Float = bounceTension, friction: Float = bounceFriction): Pair<Float, Float> {
         val displacement = target - current
@@ -95,6 +96,12 @@ class Target2 : Element("Target2") {
     }
 
     init {
+        // 将 Style 选择移动到设置列表最顶部
+        val existingValues = ArrayList(values)
+        get().clear()
+        addValue(styleValue)
+        existingValues.forEach { addValue(it) }
+
         val styles = arrayOf(
             Astolfo(this),
             Astolfo2(this),
@@ -114,13 +121,13 @@ class Target2 : Element("Target2") {
             RavenB4(this),
             Remix(this),
             Rice(this),
+            RiseModern(this),
             Slowly(this),
             Tifality(this)
         )
         styles.forEach { styleList.add(it) }
         styleValue.values = styleList.map { it.name }.toTypedArray()
 
-        addValue(styleValue)
         styleList.forEach { addValues(it.values) }
     }
 
@@ -143,13 +150,26 @@ class Target2 : Element("Target2") {
         val mainStyle = styleList.find { it.name.equals(currentStyleName, ignoreCase = true) } ?: return Border(0F, 0F, 120F, 48F)
 
         val hasTarget = mainTarget != null
-        
-        if (!hasTarget) {
+
+        // 保留目标用于消失动画
+        if (hasTarget) {
+            renderTarget = mainTarget
+        }
+
+        // 无渲染目标时直接返回
+        if (renderTarget == null) {
             lastHasTarget = false
             return Border(0F, 0F, 120F, 48F)
         }
 
-        val convertTarget = mainTarget!!
+        // None 动画类型无动画，目标消失时直接清除
+        if (!hasTarget && animationType == "None") {
+            renderTarget = null
+            lastHasTarget = false
+            return Border(0F, 0F, 120F, 48F)
+        }
+
+        val convertTarget = renderTarget!!
 
         val preBarColor = when (colorModeValue) {
             "Rainbow" -> Color(ColorUtils.getRainbowOpaque(waveSecondValue, saturationValue, brightnessValue, 0))
@@ -161,13 +181,16 @@ class Target2 : Element("Target2") {
             else -> ColorUtils.LiquidSlowly(System.nanoTime(), 0, saturationValue, brightnessValue)
         }
 
+        // 更新 animProgress：有目标时不淡出，无目标时随动画淡出
+        animProgress = if (hasTarget) 0F else 1F - animAlpha
+
         barColor = ColorUtils.reAlpha(preBarColor, preBarColor.alpha / 255F * (1F - animProgress))
         bgColor = Color(bgColorValue.red, bgColorValue.green, bgColorValue.blue, (bgColorValue.alpha * (1F - animProgress)).toInt())
 
         val returnBorder = mainStyle.getBorder(convertTarget) ?: return Border(0F, 0F, 120F, 48F)
 
-        val targetScale = 1F
-        val targetAlpha = 1F
+        val targetScale = if (hasTarget) 1F else 0F
+        val targetAlpha = if (hasTarget) 1F else 0F
         
         if (hasTarget && !lastHasTarget) {
             animScale = 0F
@@ -183,7 +206,7 @@ class Target2 : Element("Target2") {
         when (animationType) {
             "Scale" -> {
                 animScale = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animScale.toDouble(), targetScale.toDouble(), animSpeed.toDouble()).toFloat()
-                animAlpha = 1F
+                animAlpha = if (hasTarget) 1F else animScale
             }
             "Fade" -> {
                 animAlpha = net.ccbluex.liquidbounce.utils.render.animation.AnimationUtil.base(animAlpha.toDouble(), targetAlpha.toDouble(), animSpeed.toDouble()).toFloat()
@@ -218,7 +241,7 @@ class Target2 : Element("Target2") {
                 val (nextAlpha, vA) = spring(animAlpha, targetAlpha, velAlpha)
                 animAlpha = nextAlpha.coerceIn(0F, 1F)
                 velAlpha = vA
-                
+
                 val (nextScale, vS) = spring(animScale, targetScale, velScale)
                 animScale = nextScale.coerceIn(0F, 1.5F)
                 velScale = vS
@@ -250,6 +273,13 @@ class Target2 : Element("Target2") {
                 animSlideY = 0F
                 animRotation = 0F
             }
+        }
+
+        // 消失动画完成检查
+        if (!hasTarget && animAlpha < 0.01f) {
+            renderTarget = null
+            lastHasTarget = false
+            return Border(0F, 0F, 120F, 48F)
         }
 
         GL11.glPushMatrix()

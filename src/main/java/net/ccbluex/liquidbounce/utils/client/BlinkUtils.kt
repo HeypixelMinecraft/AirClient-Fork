@@ -25,6 +25,25 @@ object BlinkUtils : MinecraftInstance, Listenable {
     val isBlinking
         get() = (packets.size + packetsReceived.size) > 0
 
+    /**
+     * Called from MixinNetworkManager to intercept outgoing packets during blink.
+     * Returns false to cancel the packet (it is queued into [packets]).
+     * Returns true to let the packet pass through.
+     *
+     * Note: AirClient's blink mechanism primarily works through PacketEvent handlers
+     * calling [blink]. This method provides compatibility with the ViaLoadingBase
+     * MixinNetworkManager integration.
+     */
+    fun onPacket(packet: Packet<*>): Boolean {
+        if (isBlinking) {
+            synchronized(packets) {
+                packets += packet
+            }
+            return false
+        }
+        return true
+    }
+
     // TODO: Make better & more reliable BlinkUtils.
     fun blink(packet: Packet<*>, event: PacketEvent, sent: Boolean? = true, receive: Boolean? = true) {
         val player = mc.thePlayer ?: return

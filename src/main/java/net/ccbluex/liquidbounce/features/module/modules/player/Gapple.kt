@@ -11,6 +11,7 @@ import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedGradientRect
 import net.ccbluex.liquidbounce.utils.render.RenderUtils.drawRoundedRect
 import net.minecraft.client.gui.ScaledResolution
 import net.minecraft.item.ItemAppleGold
+import net.minecraft.network.Packet
 import net.minecraft.network.play.client.*
 import java.awt.Color
 
@@ -31,6 +32,8 @@ object Gapple : Module("Gapple", Category.PLAYER) {
     private var pitch = 0f
     var isEating = false
         private set
+
+    val packets = mutableListOf<Packet<*>>()
 
     private var slot = -1
 

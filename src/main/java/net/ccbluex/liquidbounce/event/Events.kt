@@ -113,7 +113,12 @@ object PostSprintUpdateEvent : Event()
 /**
  * Called in "moveFlying"
  */
-class StrafeEvent(val strafe: Float, val forward: Float, val friction: Float) : CancellableEvent()
+class StrafeEvent(val strafe: Float, val forward: Float, var friction: Float) : CancellableEvent()
+
+/**
+ * Called when the server teleports the player (handlePlayerPosLook)
+ */
+object TeleportEvent : Event()
 
 /**
  * Called when player moves
@@ -275,6 +280,7 @@ internal val ALL_EVENT_CLASSES = arrayOf(
     CameraPositionEvent::class.java,
     RotationUpdateEvent::class.java,
     StrafeEvent::class.java,
+    TeleportEvent::class.java,
     ScreenEvent::class.java,
     AttackEvent::class.java,
     EntityKilledEvent::class.java,
