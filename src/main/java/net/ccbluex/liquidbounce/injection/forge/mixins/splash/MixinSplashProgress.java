@@ -7,6 +7,8 @@ package net.ccbluex.liquidbounce.injection.forge.mixins.splash;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.ccbluex.liquidbounce.injection.forge.SplashProgressLock;
+import net.ccbluex.liquidbounce.utils.client.PlatformUtils;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.client.SplashProgress;
 import org.spongepowered.asm.mixin.Mixin;
@@ -45,9 +47,21 @@ public abstract class MixinSplashProgress {
 
     /**
      * 强制启用 SplashProgress 并自定义颜色主题为深色
+     *
+     * Android 平台例外: 在 FCL / PojavLauncher 等使用 libng_gl4es.so 翻译 OpenGL 指令的环境下,
+     * SplashProgress 的渲染线程 (SplashProgress$3) 会调用 GL11C.glDisable 等状态切换函数,
+     * GL4ES 在翻译这些调用时会访问非法内存地址导致 SIGSEGV 崩溃.
+     * 因此在 Android 上必须禁用 SplashProgress, 让 Forge 走原版无 splash 路径.
      */
     @Inject(method = "start", at = @At(value = "FIELD", target = "Lnet/minecraftforge/fml/client/SplashProgress;enabled:Z", opcode = 178, remap = false, ordinal = 0), remap = false, require = 1, allow = 1)
     private static void start(CallbackInfo callbackInfo) {
+        if (PlatformUtils.INSTANCE.isAndroid()) {
+            // Android (GL4ES): 禁用 SplashProgress 避免 glDisable 触发 SIGSEGV
+            enabled = false;
+            // 释放锁, 让 MixinMinecraft.waitForLock 立即返回, 不必空等 20 秒
+            SplashProgressLock.INSTANCE.setAnimationRunning(false);
+            return;
+        }
         enabled = true;
         // 深色主题: backgroundColor 同时用于 glClearColor 和纹理着色
         // 在渲染循环的 MixinSplashProgressRunnable 中会单独将纹理着色设为白色
